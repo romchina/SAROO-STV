@@ -16,7 +16,6 @@
 //   - Timing enforcement (tRCD, tRAS, tRP, tRC, refresh intervals)
 //   - Mode register programming (we hardcode CL=2, BL=4)
 //   - Auto-precharge flag handling (A10 during READ/WRITE is ignored)
-//   - DQM masking on writes (DQM is ignored for the write path)
 //
 // Backed by a 2 MB flat word array. Saturn ROM tests only hit low
 // addresses so this window is sufficient. Increase MEM_WORDS if a
@@ -74,9 +73,10 @@ module sdram_model #(
                 row[BA] <= A;
             end
 
-            // WRITE — commit one word immediately (DQM ignored)
+            // WRITE — commit with DQM byte-masking. DQM bit high = byte masked.
             if(is_write) begin
-                mem[word_addr(BA, row[BA], A[9:0])] <= DQ;
+                if(DQM[1] == 1'b0) mem[word_addr(BA, row[BA], A[9:0])][15:8] <= DQ[15:8];
+                if(DQM[0] == 1'b0) mem[word_addr(BA, row[BA], A[9:0])][ 7:0] <= DQ[ 7:0];
             end
 
             // Shift read pipeline one slot toward output

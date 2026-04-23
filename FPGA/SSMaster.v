@@ -664,7 +664,11 @@ module SSMaster(
 	// Saturn is BigEndian system
 	wire ss_ram_cs = ~SS_CS0;
 	//wire[25:0] ss_ram_addr = {2'b0, SS_ADDR};
-	wire[ 1:0] ss_mask = {SS_WR0,SS_WR1};
+	// SAROO-STV: in CS0 ROM mode (ss_cs0_type==00), force byte-mask to
+	// 2'b11 so cacheblk.v and tsdram.v treat every write as "no byte
+	// enabled" — protecting the ROM image from Saturn-side overwrites.
+	wire ss_rom_mode = (ss_cs0_type == 2'b00);
+	wire[ 1:0] ss_mask = ss_rom_mode ? 2'b11 : {SS_WR0,SS_WR1};
 	wire[15:0] ss_ram_din = {SS_DATA[7:0], SS_DATA[15:8]};
 	wire[15:0] ss_ram_dout;
 	wire[15:0] ss_ram_data_out = {ss_ram_dout[7:0], ss_ram_dout[15:8]};

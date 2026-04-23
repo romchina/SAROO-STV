@@ -80,6 +80,33 @@ module tb_cs0_rom;
     // ---------- helpers ----------
     integer fail_count = 0;
 
+    // Saturn-side write cycle (both byte enables active).
+    task ss_write16;
+        input [23:0] addr;
+        input [15:0] value;
+        integer k;
+        begin
+            @(posedge CLK_50M);
+            SS_ADDR     = addr;
+            ss_data_drv = value;
+            SS_CS0      = 1'b0;
+            SS_WR0      = 1'b0;
+            SS_WR1      = 1'b0;
+            repeat(6) @(posedge CLK_50M);
+            k = 0;
+            while(SS_WAIT !== 1'b1 && k < 200) begin
+                @(posedge CLK_50M);
+                k = k + 1;
+            end
+            @(posedge CLK_50M);
+            SS_CS0 = 1'b1;
+            SS_WR0 = 1'b1;
+            SS_WR1 = 1'b1;
+            ss_data_drv = 16'hzzzz;
+            repeat(6) @(posedge CLK_50M);
+        end
+    endtask
+
     // Saturn-side read cycle. Uses blocking assignments so stimulus
     // takes effect immediately and the WAIT poll sees fresh state.
     task ss_read16;
@@ -174,6 +201,22 @@ module tb_cs0_rom;
         // Word from next cache line — byte 0x08: "AS"=0x4153 — forces miss
         ss_read16(24'h000008, got);
         check_eq16("CS0 read byte 0x8 (expect 'AS'=0x4153 new line)", got, 16'h4153);
+
+        // --- Task 3 test: ROM mode is read-only ---
+        // ss_cs0_type defaults to 2'b00 after reset (ss_reg_ctrl[13:12]=00),
+        // so we're already in ROM mode. Attempt a write to byte 0x0 and
+        // verify the old value is still there on re-read.
+        $display("[TB] attempting Saturn-side write in ROM mode...");
+        ss_write16(24'h000000, 16'hBEEF);
+        // Re-read the same word — should still be 0x5345, NOT 0xBEEF
+        ss_read16(24'h000000, got);
+        check_eq16("ROM mode blocks CS0 write (expect unchanged 0x5345)", got, 16'h5345);
+
+        // Second write test on the already-hot cache line
+        // Byte 0x0a -> "AT" (byte 10='A', 11='T') Saturn BE => 0x4154
+        ss_write16(24'h00000a, 16'hDEAD);
+        ss_read16(24'h00000a, got);
+        check_eq16("ROM mode blocks CS0 write (expect unchanged 0x4154)", got, 16'h4154);
 
         #2000
         if(fail_count == 0) $display("[TB] ALL PASS");
