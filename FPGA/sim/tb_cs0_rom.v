@@ -218,6 +218,36 @@ module tb_cs0_rom;
         ss_read16(24'h00000a, got);
         check_eq16("ROM mode blocks CS0 write (expect unchanged 0x4154)", got, 16'h4154);
 
+        // --- Task 4 test: ss_rom_base register remaps the CS0 window ---
+        // A 1 MB ROM base maps Saturn CS0 byte 0 to ss_ram_addr 0x100000.
+        // tsdram decodes byte addr 0x100000 as row=128, col=0, bank=0.
+        // The simplified SDRAM model flattens this as mem[{row[9:0],col}]
+        // = mem[{10'h080, 10'h000}] = mem[0x20000].
+        sdram.mem[20'h20000] = 16'hFECA;   // byte-swap of 0xCAFE
+        sdram.mem[20'h20001] = 16'hEFBE;   // byte-swap of 0xBEEF
+        sdram.mem[20'h20002] = 16'h0DF0;   // byte-swap of 0xF00D
+        sdram.mem[20'h20003] = 16'h0DB0;   // byte-swap of 0xB00D
+
+        // Force ss_rom_base = 1 (= 1 MB offset into SDRAM).
+        force dut.ss_rom_base = 16'h0001;
+        repeat(4) @(posedge CLK_50M);
+
+        // Read CS0 word 0 — should hit the new base's word 0 = 0xCAFE
+        ss_read16(24'h000000, got);
+        check_eq16("ROM base=1: CS0 word 0 -> 0xCAFE", got, 16'hCAFE);
+
+        // Next word in same cache line
+        ss_read16(24'h000002, got);
+        check_eq16("ROM base=1: CS0 word 1 -> 0xBEEF", got, 16'hBEEF);
+
+        // Restore base = 0 by replacing the force value. `release` alone
+        // would leave the reg undriven until the next FSMC write.
+        force dut.ss_rom_base = 16'h0000;
+        repeat(4) @(posedge CLK_50M);
+        ss_read16(24'h000000, got);
+        check_eq16("ROM base=0 restored: CS0 word 0 -> 'SE'=0x5345", got, 16'h5345);
+        release dut.ss_rom_base;
+
         #2000
         if(fail_count == 0) $display("[TB] ALL PASS");
         else                $display("[TB] %0d FAILURES", fail_count);

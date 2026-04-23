@@ -227,6 +227,7 @@ module SSMaster(
 		if(NRESET==0) begin
 			st_reg_ctrl <= 0;
 			st_reg_spi <= 3'b111;
+			ss_rom_base <= 16'h0000;
 		end else if(st_wr_start==1) begin
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h04) st_reg_ctrl <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h16) st_reg_spi <= ST_AD[3:1];
@@ -234,8 +235,14 @@ module SSMaster(
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h22) ss_resp2 <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h24) ss_resp3 <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h26) ss_resp4 <= ST_AD;
+			// SAROO-STV: ROM base offset, 1 MB per unit
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h30) ss_rom_base <= ST_AD;
 		end
 	end
+
+	// SAROO-STV: ROM base register declaration (1 MB granularity).
+	// In CS0 ROM mode, ss_ram_addr = SS_ADDR + (ss_rom_base * 1 MB).
+	reg[15:0] ss_rom_base;
 
 
 
@@ -391,6 +398,7 @@ module SSMaster(
 						(fsmc_addr[7:0]==8'h26)? ss_cr4 :
 						(fsmc_addr[7:0]==8'h28)? ss_hirq :
 						(fsmc_addr[7:0]==8'h2a)? ss_hirq_mask :
+						(fsmc_addr[7:0]==8'h30)? ss_rom_base :
 
 						16'hffff;
 	end
@@ -675,18 +683,28 @@ module SSMaster(
 	wire ss_ram_wait;
 
 
+	// SAROO-STV ROM-mode offset: ss_rom_base * 1 MB, clamped to 26 bits.
+	wire[25:0] ss_rom_offset = {ss_rom_base[5:0], 20'b0};
+	wire[25:0] ss_addr_ext   = {2'b0, SS_ADDR};
+
 	reg[25:0] ss_ram_addr;
 	always @(posedge mclk)
 	begin
-		ss_ram_addr[25:24] <= 2'b0;
-		ss_ram_addr[23:21] <= SS_ADDR[23:21];
+		if(ss_rom_mode) begin
+			// ROM mode: place ROM image anywhere in SDRAM via ss_rom_base.
+			ss_ram_addr <= ss_addr_ext + ss_rom_offset;
+		end else begin
+			// Legacy RAM-cart mapping.
+			ss_ram_addr[25:24] <= 2'b0;
+			ss_ram_addr[23:21] <= SS_ADDR[23:21];
 
-		if(SS_ADDR[23:22]==2'b01 && ss_cs0_type==2'b10)
-			ss_ram_addr[20:19] <= 2'b00;
-		else
-			ss_ram_addr[20:19] <= SS_ADDR[20:19];
+			if(SS_ADDR[23:22]==2'b01 && ss_cs0_type==2'b10)
+				ss_ram_addr[20:19] <= 2'b00;
+			else
+				ss_ram_addr[20:19] <= SS_ADDR[20:19];
 
-		ss_ram_addr[18: 0] <= SS_ADDR[18:0];
+			ss_ram_addr[18: 0] <= SS_ADDR[18:0];
+		end
 	end
 
 	memhub _mh(
