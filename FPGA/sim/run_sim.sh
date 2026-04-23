@@ -18,11 +18,11 @@ DUT_SRC=(
     ../tsdram.v
 )
 
-# Megafunction + SDRAM stubs
+# Megafunction stubs + SDRAM behavioral model
 STUB_SRC=(
     stubs/mainpll_stub.v
     stubs/cdcfifo_stub.v
-    stubs/sdram_tie_off.v
+    stubs/sdram_model.v
 )
 
 # Output VVP file
