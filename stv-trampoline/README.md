@@ -62,12 +62,35 @@ magenta within a few frames.
 
 ### In Mednafen (predictive)
 
-Mednafen boots Saturn from CD images, not raw cart binaries. To
-predictively validate the trampoline would run on Mednafen, wrap
-`trampoline.bin` into a CUE/BIN CD layout with the Saturn ISO-style
-header + ST-V-style security code at LBA 0. This is a deliberate
-Phase-2 / Task-7 exercise — Phase 1 stops at "builds and disassembles
-as intended".
+```bash
+make                 # builds trampoline.bin
+python3 make_cd.py   # produces disc.bin + disc.cue
+mednafen -force_module ss disc.cue
+```
+
+`make_cd.py` takes the cart-flavored `trampoline.bin`, rewrites the
+four entry-point words at header offsets 0xE0..0xEC to point at
+`0x06004000` (the Saturn IPL's default IP load address), writes the
+header to LBA 0, zero-pads through the system area, and drops the
+SH-2 code at LBA 16 as the Initial Program. The CUE is MODE1/2048.
+
+Saturn's IPL needs a real Saturn BIOS ROM (`sega_101.bin` for the
+Japan v1.01 BIOS) dropped in `~/.mednafen/firmware/` to complete the
+boot. Without the BIOS Mednafen aborts at `Error opening file
+"/root/.mednafen/firmware/sega_101.bin"` — but not before logging:
+
+```
+SGID: T-000HBSTV
+SGNAME: SAROO-STV Phase 1 Trampoline
+SGAREA: JTUE
+Region: 0x1
+```
+
+That output alone confirms the header's magic, product number, game
+name, and region flags are all in the expected places — i.e. our
+cart-boot header is byte-compatible with Saturn's CD-boot header
+parser. Full boot verification (seeing magenta on screen) requires
+installing a real Saturn BIOS or running on real hardware.
 
 ## Layout
 
