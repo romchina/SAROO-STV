@@ -85,19 +85,24 @@ _start:
     ! ---- VDP2: display on, back screen = magenta ----
     !
     ! Minimal sequence:
-    !   TVMD  (0x25F80000) = 0x8000        (DISP=1, LSMD=NBG0 off, default res)
-    !   BKTAU (0x25F80020) = 0x0000
-    !   BKTAL (0x25F80022) = 0x0000        (back screen table at VRAM offset 0)
-    !   @0x25E00000       = 0xFC1F         (RGB555 magenta) — VRAM word 0
-    !   BDCLMD bit in BKTAU = 0 so back-screen color reads the word above.
+    !   TVMD  (0x25F80000) = 0x8000        (DISP=1, default res)
+    !   BGON  (0x25F80020) = 0x0000        (disable all NBG/RBG so back color fills screen)
+    !   BKTAU (0x25F800AC) = 0x0000        (BKCLMD=0 single-color mode per Yabause test)
+    !   BKTAL (0x25F800AE) = 0x0000        (back screen table at VRAM A0 offset 0)
+    !   @0x25E00000        = 0xFC1F        (RGB555 magenta) — VRAM word read in single-color mode.
     mov.l   vdp2_tvmd_ptr,  r3
     mov.w   tvmd_val,       r0
     mov.w   r0, @r3                        ! TVMD = 0x8000
 
+    mov.l   vdp2_bgon_ptr,  r3
+    mov.w   zero_w,         r0
+    mov.w   r0, @r3                        ! BGON = 0 (no backgrounds)
+
     mov.l   vdp2_bktau_ptr, r3
     mov.w   zero_w,         r0
-    mov.w   r0, @r3                        ! BKTAU = 0
+    mov.w   r0, @r3                        ! BKTAU = 0 (BKCLMD=0 single-color mode)
     mov.l   vdp2_bktal_ptr, r3
+    mov.w   zero_w,         r0
     mov.w   r0, @r3                        ! BKTAL = 0
 
     mov.l   vdp2_vram_ptr,  r3
@@ -115,8 +120,9 @@ stack_top_ptr:      .long 0x06100000
 wram_base_ptr:      .long 0x06000000
 heartbeat_val_ptr:  .long 0x5AA5A55A
 vdp2_tvmd_ptr:      .long 0x25F80000
-vdp2_bktau_ptr:     .long 0x25F80020
-vdp2_bktal_ptr:     .long 0x25F80022
+vdp2_bgon_ptr:      .long 0x25F80020
+vdp2_bktau_ptr:     .long 0x25F800AC
+vdp2_bktal_ptr:     .long 0x25F800AE
 vdp2_vram_ptr:      .long 0x25E00000
 
     .align 1

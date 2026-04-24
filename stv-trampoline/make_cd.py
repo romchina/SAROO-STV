@@ -51,16 +51,31 @@ def main() -> int:
     header = bytearray(data[:0x100])
     code   = data[0x100:]
 
-    # Header fields 0xE0..0xEF hold four 32-bit words:
-    #   0xE0: master-SH2 initial PC / IP size placeholder
-    #   0xE4: master-SH2 initial SP seed
-    #   0xE8: slave-SH2 initial PC
-    #   0xEC: slave-SH2 initial SP
-    # For CD boot we want all "program entry" fields to point at the
-    # HWRAM IP load target so whichever one the IPL uses, we land on
-    # our code.
-    for off in (0xE0, 0xE4, 0xE8, 0xEC):
-        struct.pack_into(">I", header, off, IP_LOAD_ADDR)
+    # Pad IP to whole sectors first so we can write its size into header
+    ip_pad = (-len(code)) % SECTOR_BYTES
+    ip_blob = code + b"\x00" * ip_pad
+    ip_bytes   = len(ip_blob)
+    ip_sectors = ip_bytes // SECTOR_BYTES
+
+    # Saturn CD boot header (LBA 0, 0xE0..0xFF). Layout differs from the
+    # cart header the trampoline.bin was assembled with, so overwrite.
+    #
+    #   0xE0 : IP size in sectors (BE u32)
+    #   0xE4 : reserved
+    #   0xE8 : 1st Read Address  (where IPL loads IP into HWRAM)
+    #   0xEC : 1st Read Size     (bytes)
+    #   0xF0 : reserved
+    #   0xF4 : reserved
+    #   0xF8 : 1st Master PC
+    #   0xFC : 1st Slave  PC
+    struct.pack_into(">I", header, 0xE0, ip_sectors)
+    struct.pack_into(">I", header, 0xE4, 0)
+    struct.pack_into(">I", header, 0xE8, IP_LOAD_ADDR)
+    struct.pack_into(">I", header, 0xEC, ip_bytes)
+    struct.pack_into(">I", header, 0xF0, 0)
+    struct.pack_into(">I", header, 0xF4, 0)
+    struct.pack_into(">I", header, 0xF8, IP_LOAD_ADDR)
+    struct.pack_into(">I", header, 0xFC, IP_LOAD_ADDR)
 
     # Assemble the disc image.
     #   LBA 0        : 2 KB header (ours is 256 B, pad with zeros)
@@ -68,10 +83,6 @@ def main() -> int:
     #   LBA 16..     : IP sectors containing the SH-2 code
     disc = bytearray(SECTOR_BYTES * SYSTEM_AREA_LBA)   # LBA 0..15
     disc[0:len(header)] = header
-
-    # Pad IP to whole sectors
-    ip_pad = (-len(code)) % SECTOR_BYTES
-    ip_blob = code + b"\x00" * ip_pad
     disc.extend(ip_blob)
 
     # Enforce minimum CD image — Mednafen accepts tiny but not empty
