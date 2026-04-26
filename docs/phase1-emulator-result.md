@@ -66,6 +66,16 @@ unmodified. `ss.cd_sanity 0` and `ss.bios_sanity 0` were tried — no
 effect, since the gate is inside BIOS code, not in Mednafen's sanity
 layer.
 
+Visual evidence — each strip below is 22 captured frames concatenated
+left-to-right (~0.5 s apart), so the strip reads like a flipbook of
+the whole post-boot window. Both early and late strips show the same
+floating-disc CD player UI ("TRACK 01", "Disc...") frame after frame,
+i.e. the BIOS settled into the player and never autobooted our IP:
+
+<img src="img/mednafen-boot-early.png" width=100%/>
+
+<img src="img/mednafen-boot-late.png" width=100%/>
+
 The real SAROO-STV target is **cart boot via CS0/CS1/CS2**, which
 never touches the CD path, so this isn't a blocker for the project.
 Mednafen CD predictive is limited to "header parses correctly" as
