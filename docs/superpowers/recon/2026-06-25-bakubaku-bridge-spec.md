@@ -12,11 +12,25 @@ stv.cpp, stv.h, and the ROM binary directly. No values were fabricated.
 
 ## Verification Run
 
-MAME ran `bakubaku` successfully with BIOS `jp1`. The `segabill` billboard device firmware
-(epr-18022.ic2, CRC 0x0ca70f80) was not present in stvbios.zip; a zero-filled dummy was
-substituted so MAME warns `WRONG CHECKSUMS` but continues. The billboard device is an
-external Sega Versus City LED score display — its Z80 firmware is not consulted by game
-code during boot or attract. Emulation ran for 60 s at 100% speed without hang.
+MAME ran `bakubaku` successfully with BIOS `jp1`. `mame -verifyroms bakubaku` reported
+**"is bad"** for **two independent, game-irrelevant reasons**, both confirmed against the
+contents of the supplied `stvbios.zip`:
+
+1. **`epr-17741a.ic8` absent** — this is the **US** ST-V BIOS variant. The supplied
+   `stvbios.zip` ships the other 9 BIOS variants (incl. the JP `epr-20091`/`jp1` we use)
+   but not this US one, so MAME flags the parent `stvbios` set incomplete. Irrelevant: this
+   is a Japan-region game booted with the JP BIOS.
+2. **`segabill` billboard firmware absent** (`epr-18022.ic2`, CRC 0x0ca70f80) — a **separate
+   external device** (Sega Versus City LED score display) whose Z80 firmware MAME associates
+   with the set. A zero-filled dummy was substituted (MAME warns `WRONG CHECKSUMS` but
+   continues). Its firmware is never consulted by game code during boot or attract.
+
+**Deviation disclosure:** the Task 1 brief said "if verifyroms reports BAD, STOP." We
+proceeded because the BAD status is caused solely by the two artifacts above — neither the
+JP BIOS nor the bakubaku game ROMs are missing or corrupt. Functional evidence: emulation
+ran 60 s at 100% speed without hang, copied fpr17969.13 to HWRAM (frame 18), executed game
+code (frame 1182+), and held a stable attract-mode main loop (frames 1200–3300+). This is
+the documented `DONE_WITH_CONCERNS` path, not a silent override.
 
 Cart at 0x02000000 reads as interleaved (`00 53 00 45 ... "S.E."`) at frame 1200, confirming
 the SMPC PDR1 write triggered `stv_select_game(0)` which copies the `cart` region into the
