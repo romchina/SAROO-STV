@@ -64,3 +64,20 @@ mame bakubaku -bios jp1 -video none -autoboot_script /tmp/capstate.lua -seconds_
 # run (Yabause): StvBoot loads stvstate/, SH2Int=1, VideoCore=2, --stvboot
 STV_SELFTEST=1 STV_PCSAMPLE=1 STV_PCTRACE=1 build/src/gtk/yabause -b bios/saturn-jp-v100.bin --stvboot
 ```
+
+## M-HLE-2 progress (sound handshake cleared; attract loop reached)
+
+- The frame-1185 capture froze the game *in* the 68000 sound-handshake wait (it polls
+  sound RAM `0x25A07DBC` for `0x4F4B`; at frame 1185 the 68000 hadn't written it yet).
+- Probe across frames: `0x4F4B` appears at sound RAM `0x05A07DBC` by **frame 1220**, when
+  PC is already the attract loop `0x06036DBC`. So **capture at frame 1300** (stable attract)
+  instead — the handshake is done and the game is past the sound wait.
+- Added sound RAM (`0x05A00000`, 512 KB) to the capture + StvBoot load.
+- **RESULT:** the master SH-2 reaches and runs bakubaku's **attract main loop**
+  (`0x06036DBA`-`0x06036DCA`), matching MAME's attract PC region → state/trajectory
+  success criterion met at the PC level.
+- **OPEN (next M-HLE-2):** the loop spins un-throttled (~1e9 instr/15s, not 60 fps), so
+  it is NOT vblank-synced — the attract likely isn't advancing/rendering in real time.
+  Next: VDP2 vblank + SCU interrupt delivery so the main loop frame-syncs like MAME.
+- Minor: sound-RAM readback after load showed a discrepancy (`snd05` hi word != 0x4F4B);
+  not on the attract path (capture-at-attract skips the sound check), noted for later.
