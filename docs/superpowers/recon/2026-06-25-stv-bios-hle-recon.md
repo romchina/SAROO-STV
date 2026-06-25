@@ -194,3 +194,51 @@ state + ST-V BIOS + Yabause Saturn core = real ST-V rendering on screen.
   to 0x05E00000 actually populate Yabause's VDP2 VRAM? read it back) and the VDP2 display/layer
   enable state after leaving the test menu. The ST-V test-menu render stays the solid proof
   that the bridge renders real ST-V graphics; the game-attract render is the close next step.
+
+## RESOLVED (2026-06-26): black attract = VDP2 DISP turned off by the ST-V BIOS
+
+Systematic debugging closed the "black attract" item. **It was NOT a VRAM routing bug** — the
+captured VDP2 VRAM/CRAM and the Yabause render pipeline are both correct. The single defect is
+that the **VDP2 DISP bit (TVMD bit 15) is off**.
+
+Evidence chain (all via new env-gated probes, see WSL commit):
+1. `STV_VDPLOG` (per-frame VDP2 census): frame 1 `TVMD=8000` (DISP on, from the reproduced
+   vdp2reg), frame 2+ `TVMD=0000`, nonblack pixels = 0 the whole run.
+2. `STV_PCSAMPLE`/`STV_IRQ`: the master SH-2 parks in the `0x06036DBA` loop; the vblank IRQ
+   (vec 0x40/0x41, handler 0x06001F48) fires every frame and the ISR runs a real routine
+   (0x06001FFC -> 0x06002098 -> 0x060021A4 -> ...) without crashing.
+3. `STV_WWATCH`/`STV_WAITWATCH`: the loop's gate byte `0x060833F0` is never written after the
+   snapshot load — it is a reused scratch byte, a red herring, not the blocker.
+4. **MAME oracle** (`/usr/games/mame bakubaku`, Lua `register_frame_done`): at frame 1300 the
+   real machine shows the **full attract** (leaf field + "INSERT COIN(S)", nonblack 63793/71680),
+   and the master **also** parks in the `0x06036DBA` loop (flag@0x060833F0=01) continuously from
+   f1200 to f2200+. **The long master park is faithful real-hardware behaviour** — the attract is
+   driven by the vblank ISR, not by the main loop. (Note: MAME Lua `install_write_tap` silently
+   fails on RAM (fast-path); use `read_u8` polling + `screens:at(1):pixels()` for PPM dumps.)
+5. `STV_TVMD` (VDP2 TVMD write log): the run has exactly **one** DISP transition,
+   `8000 -> 0000 (DISP OFF)` from ST-V BIOS **PC 0x000034DE** (`MOV.W R2,@R3`, R3=`0x25F80000`
+   VDP2 base, R2=0), and it is never re-enabled. The BIOS routine 0x34C0-0x34E0 is
+   "wait vblank (poll TVSTAT bit3) then write TVMD"; in replay the value computes to 0
+   (`R0 = VDP2_base; ...; R2 = R0 & 1` = 0).
+
+**Validation (the money shot):** `STV_FORCE_DISP` (force `TVMD |= 0x8000` on every TVMD write)
+-> the twin renders the **bakubaku attract leaf background**, nonblack **63764 ~= MAME 63793**,
+pixel-accurate against the real machine.
+
+![twin (right) vs MAME (left)](../../img/stv-attract-twin-vs-mame.png)
+
+Left = MAME @ f1300, right = Yabause twin (FORCE_DISP). The VDP2 NBG background is identical.
+The missing "INSERT COIN(S)" / eyes / "CREDIT 0" are **VDP1 sprites** (the master is parked and
+no longer issuing VDP1 command lists; the frozen VDP1 framebuffer is not being composited).
+
+### Why this matters / next steps
+- `STV_FORCE_DISP` is a **diagnostic scaffold, not a faithful fix**. The faithful fix is part of
+  M-HLE-3: the BIOS "set display mode" routine at 0x34DE must end up with DISP on. Either HLE that
+  routine, or determine why its branch (`R1 = [0x358C]; TST R1, R0` over `VDP2_base & R1`) takes
+  the DISP-off path under our reproduced state. Real SAROO cannot patch the mask ROM, so this is
+  on the HLE list either way.
+- The other open visual item is the **VDP1 sprite overlay** (INSERT COIN/eyes/CREDIT): trace VDP1
+  sprite rendering + framebuffer swap on the twin.
+
+Proof images: `docs/img/stv-attract-twin-vs-mame.png`, `stv-attract-twin-forcedisp.png`,
+`stv-attract-mame-f1300.png`; also `~/Downloads/SAROO-STV_attract_render.png`.
