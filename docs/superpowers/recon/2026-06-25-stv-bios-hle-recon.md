@@ -242,3 +242,41 @@ no longer issuing VDP1 command lists; the frozen VDP1 framebuffer is not being c
 
 Proof images: `docs/img/stv-attract-twin-vs-mame.png`, `stv-attract-twin-forcedisp.png`,
 `stv-attract-mame-f1300.png`; also `~/Downloads/SAROO-STV_attract_render.png`.
+
+## FULL attract renders (2026-06-26): VDP1 sprites via Option A (framebuffer blit)
+
+The remaining overlay (INSERT COIN(S) / eyes / CREDIT) now renders too -- the twin shows the
+**complete** bakubaku attract, pixel-matching MAME.
+
+![full attract: MAME (left) vs twin (right)](../../img/stv-attract-full-vs-mame.png)
+
+### Why the VDP1 sprites were missing (3 layered causes)
+1. **VDP1 was never triggered to draw.** Sprites are plotted when the game writes `PTMR`
+   (`vdp1.c`: `if (val==1) Vdp1Draw()`); in replay nothing does, so `Vdp1Draw()` ran 0 times and
+   the VDP1 framebuffer stayed empty (`STV_VDP1` log + `STV_VDPLOG` shows `VDP1fb front=0`).
+   Forcing a draw (an early experiment) confirmed VDP1 *can* render the captured command list:
+   the dumped framebuffer clearly shows INSERT COIN(S)/eyes/CREDIT (994 px).
+2. **VDP1 registers are not reproduced.** `TVMR` is garbage (bit0=1), so the sprite layer read
+   the framebuffer as 8-bit/1024-wide instead of 16-bit/512 (`STV_SPRDBG`: `vdp1w=1024 vdp1ps=1`).
+3. **Driving `Vdp1Draw()` directly fought Yabause's VDP1 draw thread + FB swap/erase timing** --
+   the composite kept reading a stale/erased buffer (`nz=0` despite a populated framebuffer).
+
+### Option A (the clean fix): blit MAME's VDP1 framebuffer
+Mirror what we already do for VDP2 VRAM/CRAM -- reproduce the VDP1 framebuffer from MAME instead
+of recomputing it. MAME Lua at frame 1300 dumps program-space **0x05C80000** (the VDP1 FB read
+region; the `0x25C80000` cache mirror reads empty in MAME) -> `stvstate/vdp1fb.bin` (0x40000 bytes,
+big-endian 16-bit, 648 nonzero u32). `vidsoft.c` (`STV_VDP1FB`) blits it into
+`vdp1frontframebuffer` every frame and forces 16-bit/512 readout. `VidsoftDrawSprite` then
+composites 977 sprite pixels (all `bit15=1` RGB white) over the leaves.
+
+### Open priority anomaly
+Captured priorities: sprite (PRISA)=6, NBG1=4, NBG0=2, NBG3=1, RBG0=0. The sprite at its real
+priority 6 should already beat every background (<=4), yet it only appears when forced to 7
+(`STV_SPRI7`). The blit path likely skips some Titan sprite-priority setup. `STV_SPRI7` yields the
+pixel-correct result; a faithful fix is a follow-up.
+
+### Scaffolds (snapshot-replay twin; all env-gated, inert by default)
+`STV_FORCE_DISP` (VDP2 DISP on) + `STV_VDP1FB` (blit VDP1 FB + 16-bit readout) + `STV_SPRI7`
+(sprite priority 7). Run: `STV_FORCE_DISP=1 STV_VDP1FB=1 STV_SPRI7=1 ... --stvboot`.
+WSL commit `c23dfa88`. Proof: `docs/img/stv-attract-full-twin.png`,
+`stv-attract-full-vs-mame.png`, `stv-vdp1-sprites.png`; `~/Downloads/SAROO-STV_attract_FULL.png`.
