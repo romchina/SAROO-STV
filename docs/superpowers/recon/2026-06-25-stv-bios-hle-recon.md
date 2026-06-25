@@ -177,3 +177,20 @@ state + ST-V BIOS + Yabause Saturn core = real ST-V rendering on screen.
 - Next (to reach the game proper): trace where the ST-V BIOS reads test/service each frame
   (instrument reads in the BIOS service/vblank routine) and shim it to "not held".
 - Screenshot saved: C:\Users\mixio\Downloads\SAROO-STV_bakubaku_render.png
+
+## IOGA page-number BUG fixed; game leaves test menu but attract still black
+
+- BUG (mine): the IOGA stub was registered at FillMemoryArea page 0x004. Yabause pages are
+  `addr>>16`, so 0x00400000 is page **0x040**, not 0x004 (which is 0x00040000). The stub was
+  never hit (STV_IOGA read log = 0). Fixed to 0x040 -> the ST-V BIOS now reads the IOGA
+  (observed at the cache mirror 0x20400007 ×50, etc.) and **leaves the test/service menu**
+  (resolution switches 352x224 -> 320x224 game mode).
+- BUT the game screen is then BLACK (frame 150 and 600), even after reproducing VDP2 VRAM
+  (0x05E00000), VDP1 VRAM (0x05C00000) and CRAM (0x05F00000) from MAME frame 1300. Captured
+  VRAM has real data (vdp2vram[0x100]=0x30303127, cram[0]=0x00008C80 colors).
+- The normal "ST-V BIOS boots the cart" path (no state injection, -a) is also black through
+  frame 1400 — that full boot does not complete on Yabause's core.
+- OPEN (next session, careful): verify VDP VRAM write ROUTING (does MappedMemoryWriteLongNocache
+  to 0x05E00000 actually populate Yabause's VDP2 VRAM? read it back) and the VDP2 display/layer
+  enable state after leaving the test menu. The ST-V test-menu render stays the solid proof
+  that the bridge renders real ST-V graphics; the game-attract render is the close next step.
