@@ -81,3 +81,20 @@ STV_SELFTEST=1 STV_PCSAMPLE=1 STV_PCTRACE=1 build/src/gtk/yabause -b bios/saturn
   Next: VDP2 vblank + SCU interrupt delivery so the main loop frame-syncs like MAME.
 - Minor: sound-RAM readback after load showed a discrepancy (`snd05` hi word != 0x4F4B);
   not on the attract path (capture-at-attract skips the sound check), noted for later.
+
+## M-HLE-2 frame-sync — SOLVED (vblank via VDP2/SCU register reproduction)
+
+- Decoded the attract main loop: it spin-waits while a flag byte at `0x060833F0` is > 0,
+  incrementing a counter at `0x06083400`. The flag is cleared by the **vblank IRQ handler**.
+- Root cause of the un-throttled spin: we reproduced RAM + SH-2 regs but NOT the VDP2/SCU
+  hardware registers, so the SCU interrupt mask (SpeedySetup default) blocked vblank → the
+  flag never cleared → infinite spin.
+- Fix: capture VDP2 regs (`0x05F80000`, 0x120B; TVMD=0x8000 = display on) + SCU regs
+  (`0x05FE0000`, 0x100B; IMS=0xFFFFE1FC = vblank-IN unmasked) at frame 1300, and write them
+  in StvBoot via `MappedMemoryWrite{Word,Long}Nocache` (capture: `/tmp/capstate2.lua`).
+- RESULT: spin (1.4e9 instr/15s) → frame-paced (~100 loop hits/s, bounded). The SH-2 now
+  idles at `0x0600205A` between vblanks and runs the attract loop once per frame = vblank
+  delivery works, the frame-wait flag is being cleared.
+- OPEN: confirm the attract animation actually ADVANCES (per-frame work / VDP output) vs
+  just frame-pacing an idle — needs a finer PC trace or VDP VRAM/output check. Plus the
+  capture set is now HWRAM+LWRAM+sndram+VDP2regs+SCUregs (SMPC/VDP1 still not captured).
