@@ -3,6 +3,8 @@
 **Fork 自**: [tpunix/SAROO](https://github.com/tpunix/SAROO)
 **目标**: 在不改 Saturn 主板的前提下，通过 SAROO 卡槽硬件让真 Saturn 启动并运行 ST-V 街机游戏 ROM。
 
+> 📌 **真机改造清单见 [STV-HARDWARE-PORTING.md](STV-HARDWARE-PORTING.md)** —— 把 Yabause 软件孪生摸清的一切翻译成真机 SAROO 所需的 FPGA/trampoline/BIOS-HLE/输入改造，对照下方 Phase 划分。
+
 ---
 
 ## 为什么可行（硬件前提）
