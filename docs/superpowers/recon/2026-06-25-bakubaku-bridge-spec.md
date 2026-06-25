@@ -292,3 +292,55 @@ Screenshot of attract mode was not captured: MAME v0.242 Lua API `video:save_sna
 returns nil in this build, and `-video none` precludes render-based snapshots. The 60-second
 uninterrupted run at 100% speed with stable main-loop PC is the functional equivalent
 of an attract-mode confirmation.
+
+---
+
+# CORRECTION (2026-06-25, from M3/M4 Yabause-bridge investigation)
+
+The original `ENTRY` section above is **WRONG** in its core assumption. During M3/M4
+bring-up on the Yabause bridge, MAME + cart cross-checks proved:
+
+## 1. fpr is NOT copied 1:1 to HWRAM 0x06000000
+The claim "fpr byte offset 0x249FE maps to HWRAM 0x060249FE" is false. Verified:
+`fpr[0x2000]=D0266000` but MAME `HWRAM[0x06002000]=2F266212`; `fpr[0x249FC]=54F6B067`
+but MAME `HWRAM[0x060249FC]=D5106363`. They do not match.
+
+## 2. The real game-image load mapping (VERIFIED on 4 addresses)
+The running game code maps **`fpr[k] -> HWRAM[k + 0x0600F000]`** (fpr body at 0x1000 ->
+HWRAM 0x06010000). Confirmed: `HWRAM[0x0604B440]=fpr[0x3C440]=62637604`,
+`HWRAM[0x0604B444]=fpr[0x3C444]=225274FF`, `HWRAM[0x06036DB0]=fpr[0x27DB0]=D3220303`,
+`HWRAM[0x06036DB8]=fpr[0x27DB8]=0009D21F`. So the GAME code (main loop 0x06036DBC =
+fpr[0x27DBC], entry-region 0x0604B446 = fpr[0x3C446]) IS in the cart, plain, loadable.
+
+## 3. 0x060249FE is ST-V BIOS scratch, NOT a cart address
+The bytes at HWRAM 0x06002000-0x0602xxxx (the "first-stage IP" that runs frames 18-1181)
+are **NOT in the cart** at all. They are **ST-V BIOS code**: found in every ST-V BIOS
+variant incl. `epr-20091.ic8` (jp1) at offset **0x31400 word-swapped** (and the SH-2
+vector 0x06002052 at BIOS 0x600). The ST-V BIOS copies its own boot/security/loader code
+to HWRAM 0x06002000, runs it, and it eventually loads the game and jumps to 0x0604B446.
+
+## 4. Consequence: bakubaku depends on the ST-V BIOS
+- 0x060249FE (the original ENTRY) is meaningless on a stock Saturn — its code isn't in
+  the cart and isn't reproducible without the ST-V BIOS.
+- Cold-jumping to the game code 0x0604B446 fails: it is mid-execution and expects the
+  register + memory state the ST-V BIOS first-stage established (e.g. a fill-loop count
+  R4 that is garbage on a cold jump). Captured first-stage entry register state (frame 18,
+  PC 0x060249FE): R15=0x060FFFE8, VBR=0x06000000, GBR=0x06033480, R14=0x060335A8,
+  PR=0x06024878, others mostly 0.
+- Therefore **running bakubaku on a stock Saturn requires HLE of the ST-V BIOS** (boot
+  sequence + the runtime services the game calls, e.g. the BIOS callback at 0x00005E46).
+  This is exactly SAROO roadmap **Phase 2 ("ST-V BIOS 最小 HLE")** — a distinct
+  reverse-engineering sub-project, not a small boot tweak.
+
+## 5. What the Yabause bridge DID prove (positive)
+- M2 cart-in-CS0 mapping is correct (SH-2 reads the right bytes; verified live).
+- With the corrected load (fpr[k]->HWRAM[k+0x0600F000]) and a cold jump to 0x0604B446,
+  **Yabause's Saturn SH-2 core executes real bakubaku game code** (it runs the fill loop
+  at 0x0604B442-0x0604B44A). This partially validates the core thesis (Saturn silicon
+  runs ST-V game code); full attract is blocked only by the missing ST-V BIOS HLE/state.
+
+## Next (Phase-2 / boot-HLE sub-project)
+Disassemble the ST-V BIOS first-stage (BIOS ROM 0x31400 -> HWRAM 0x06002000) and the
+runtime service routines bakubaku invokes; identify the minimal set; reimplement as an
+HLE layer (the bridge's "ST-V BIOS" stand-in). Use MAME as the reference oracle
+throughout. This deserves its own spec/plan.
