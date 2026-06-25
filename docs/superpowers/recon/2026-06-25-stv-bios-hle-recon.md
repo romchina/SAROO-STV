@@ -135,3 +135,30 @@ sound RAM, VDP2 regs, SCU regs. The vblank handler 0x06035278 needs MORE: almost
 **SMPC** (it runs each frame and reads pads via SMPC) and likely **VDP1** regs/VRAM, possibly
 VDP2 VRAM/CRAM. NEXT: either trace 0x06035278's out-of-captured-range reads, or comprehensively
 capture SMPC + VDP1 (regs+VRAM) + VDP2 VRAM/CRAM at frame 1300 and reproduce them, then re-test.
+
+## RESOLVED: crash root cause = missing ST-V BIOS ROM runtime services (CONFIRMED)
+
+Traced the vblank crash precisely (no guessing):
+- vblank handler 0x06035278 -> JSR @[0x06000610]=0x06000D14 (BIOS routine in HWRAM) ->
+  at 0x06000D2E: `R3 = [0x000010E8]; JSR @R3`. **0x000010E8 is in BIOS ROM (0x0-0x7FFFF).**
+- On a Saturn BIOS, [0x000010E8] is garbage for an ST-V game -> JSR to 0x0070FE00 -> crash
+  (or illegal instruction -> trap loop at 0x0600205A). This is the runtime ST-V BIOS
+  service dependency identified at M4, now pinned to an exact address.
+- DECISIVE TEST: byte-swapped epr-20091 (ST-V BIOS, [0x000010E8]=0x00000EFC valid) loaded as
+  Yabause's BIOS + the captured-state reproduction + --stvboot. RESULT: **no crash; vblank-IN
+  (vec0x40) + vblank-OUT (vec0x41) interrupts fire every frame continuously; bakubaku runs the
+  attract main loop (0x06036DBA-0x06036DCA) frame-paced.** The crash was 100% the missing ST-V
+  BIOS ROM.
+
+### Thesis fully validated
+Saturn silicon (Yabause core) + reproduced handoff state + ST-V BIOS services = bakubaku runs
+its attract loop healthily, vblank-driven, no crash. (Build a byte-swapped ST-V BIOS:
+swap each 16-bit word of epr-20091.ic8; run `-b stv-jp-20091.bin --stvboot`.)
+
+### Design reframe for the twin (runtime services)
+The twin's cleanest "runtime services" provider IS the ST-V BIOS ROM at 0x00000000 (a scaffold,
+like the state snapshot) — NOT hand-HLE-ing each routine. The working twin now lets us ENUMERATE
+exactly which ST-V BIOS routines the game calls (0x000010E8->0x00000EFC, plus the others in the
+0x06000D14 chain: 0x06002098, 0x06001988, 0x060014FE). Real SAROO (locked Saturn mask ROM) must
+HLE those specific routines (M-HLE-3 / Phase 2) — the twin tells us the precise list.
+Note: stv-jp-20091.bin is copyright-derived; not committed (rebuild from stvbios.zip).
