@@ -117,3 +117,21 @@ previous "frame-sync solved" claim:
 - HONEST STATUS: vblank now triggers, but interrupt handling crashes. This is the real
   M-HLE-2 hard part (not done). Lesson: verify advancement, don't infer success from a
   spin stopping — a stopped spin can be a crash into a trap loop.
+
+## M-HLE-2 vblank crash — TRACED to game handler 0x06035278 (incomplete capture set)
+
+Instrumented SH2HandleInterrupts (STV_IRQ env). The interrupt DISPATCH is fully correct:
+- vblank fires: `[IRQ#0] vec=0x40 lvl=15 handler=0x06001F48` (vector 0x40 = VBLANK-IN, correct).
+- 0x06001F48 = standard BIOS dispatch stub (6-byte entries: push R0; BRA common; MOV #vec,R0).
+- common handler 0x06001FFC: `SHLL2 R0` (0x40<<2=0x100), then loads the user handler from a
+  table: `R6 = [0x06000900 + 0x100] = [0x06000A00] = 0x06035278` (valid game code), `JSR @R6`.
+- So it correctly calls the GAME's vblank handler at **0x06035278**.
+- The crash is INSIDE 0x06035278: it reads hardware state we did NOT reproduce (SMPC input /
+  VDP1 / etc.), computes a bad value, and either hits an illegal instruction (-> trap loop at
+  0x0600205A `BF` self) or jumps to garbage (observed PC=0x0070FE00 via a bad R3).
+
+ROOT CAUSE (verified): the capture set is still incomplete. Reproduced so far: HWRAM, LWRAM,
+sound RAM, VDP2 regs, SCU regs. The vblank handler 0x06035278 needs MORE: almost certainly
+**SMPC** (it runs each frame and reads pads via SMPC) and likely **VDP1** regs/VRAM, possibly
+VDP2 VRAM/CRAM. NEXT: either trace 0x06035278's out-of-captured-range reads, or comprehensively
+capture SMPC + VDP1 (regs+VRAM) + VDP2 VRAM/CRAM at frame 1300 and reproduce them, then re-test.
