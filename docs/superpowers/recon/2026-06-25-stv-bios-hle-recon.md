@@ -98,3 +98,22 @@ STV_SELFTEST=1 STV_PCSAMPLE=1 STV_PCTRACE=1 build/src/gtk/yabause -b bios/saturn
 - OPEN: confirm the attract animation actually ADVANCES (per-frame work / VDP output) vs
   just frame-pacing an idle — needs a finer PC trace or VDP VRAM/output check. Plus the
   capture set is now HWRAM+LWRAM+sndram+VDP2regs+SCUregs (SMPC/VDP1 still not captured).
+
+## CORRECTION (same session): "frame-sync SOLVED" was WRONG — it's an interrupt crash
+
+Fine-grained PC sampling (every 0x1000 instr) + a user-observed crash overturned the
+previous "frame-sync solved" claim:
+- The SH-2 spends ~99.8% of time at `0x0600205A`, which decodes to `BF 0x0600205A`
+  (branch-to-self infinite loop) — it is the **general illegal-instruction exception
+  handler** (vec[4] @0x06000010 = 0x06002056 -> ... -> 0x0600205A trap loop). So the
+  reduced instruction count was the SH-2 **trapped after an illegal instruction**, NOT
+  clean frame-paced idle.
+- A separate run crashed with "Master SH2 invalid opcode" at PC=0x0070FE00 (jumped via a
+  garbage R3) — same class of failure (execution corrupted into garbage).
+- Root cause (revised): reproducing VDP2/SCU regs DID make vblank fire (real progress),
+  but the game cannot HANDLE the interrupt — the interrupt environment is not fully
+  reproduced (missing SMPC/VDP1 state and/or the handler's expected setup), so taking the
+  IRQ lands in an inconsistent context -> illegal instruction (trap loop) or garbage jump.
+- HONEST STATUS: vblank now triggers, but interrupt handling crashes. This is the real
+  M-HLE-2 hard part (not done). Lesson: verify advancement, don't infer success from a
+  spin stopping — a stopped spin can be a crash into a trap loop.
