@@ -96,6 +96,13 @@ read-value assertions; the trap by "service call X produces the MAME-observed ef
 - **M-HLE-2 — Runtime shims + service HLE.** Add IOGA + EEPROM shims and the minimal
   BIOS-service HLE; iterate until the master SH-2 reaches `0x06036DBC` and the key state
   matches MAME (success criterion).
+- **M-HLE-3 — Computed boot-state construction (SAROO-bound).** Replace the MAME state
+  *snapshot* (M-HLE-1) with logic that *constructs* the handoff state on-machine —
+  replicating the **effect** of the ST-V BIOS first-stage (load the game image to its
+  HWRAM home, build the system/vector area, set the registers) without any MAME capture.
+  This is the part that must run on real SAROO hardware; M-HLE-0's trace defines exactly
+  what state must be constructed. Verified the same way (reach `0x06036DBC`, match MAME).
+  Until M-HLE-3, the bridge runs only in the emulator.
 
 ## Risks & open questions
 
@@ -107,6 +114,25 @@ read-value assertions; the trap by "service call X produces the MAME-observed ef
    simple, verifiable binary layout.
 4. **Handoff-point precision** — capturing at an inconsistent point yields inconsistent
    state. M-HLE-0 fixes a single deterministic handoff PC.
+
+## Real-hardware (SAROO) transferability
+
+Explicit, because the snapshot scaffold raises the question "can this ever run on real
+SAROO?" Breakdown of what transfers to SAROO hardware vs what is emulator-only:
+
+| Piece | Runs on real SAROO? |
+|---|---|
+| Runtime ST-V BIOS service HLE (reimplemented service vectors) | **Yes — and mandatory.** The Saturn mask ROM can't be replaced, so SAROO must HLE these regardless. This is the bulk of the work and fully transfers. |
+| IOGA shim, 93C46 EEPROM shim | Yes (= SAROO FPGA I/O + firmware EEPROM). |
+| CART_STV cart mapping | Yes (= SAROO FPGA CS0). |
+| **MAME state snapshot + injection (M-HLE-1)** | **No — emulator-only scaffold.** Real SAROO has no MAME to snapshot. |
+| **Computed boot-state construction (M-HLE-3)** | **Yes — this replaces the snapshot for real hardware.** |
+
+The snapshot (M-HLE-1) is a deliberate stepping stone: it gets the game running so the
+*transferable* runtime HLE + shims can be developed and validated against MAME, before
+the harder M-HLE-3 boot construction. Using the snapshot now does NOT lock the project
+out of SAROO. M-HLE-0's trace of what state the game actually reads is the safeguard that
+keeps the runtime HLE from depending on snapshot-specific state SAROO couldn't construct.
 
 ## Spec → plan
 
