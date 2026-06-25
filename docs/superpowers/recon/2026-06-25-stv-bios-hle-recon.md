@@ -162,3 +162,18 @@ exactly which ST-V BIOS routines the game calls (0x000010E8->0x00000EFC, plus th
 0x06000D14 chain: 0x06002098, 0x06001988, 0x060014FE). Real SAROO (locked Saturn mask ROM) must
 HLE those specific routines (M-HLE-3 / Phase 2) — the twin tells us the precise list.
 Note: stv-jp-20091.bin is copyright-derived; not committed (rebuild from stvbios.zip).
+
+## VISUAL PROOF: the bridge renders real ST-V graphics
+
+Added a framebuffer dump (vidsoft.c, STV_SHOT env -> dispbuffer to PPM) and an IOGA idle
+stub (memory.c, 0x00400000 -> 0xFF). Screenshot at frame 150 (352x224): **the Yabause
+bridge renders a crisp, correct ST-V screen** — the ST-V TEST/SERVICE MENU, with "BAKU BAKU
+ANIMAL" in the game list, correct fonts/colors. This is end-to-end visual proof: reproduced
+state + ST-V BIOS + Yabause Saturn core = real ST-V rendering on screen.
+
+- It lands on the test/service menu rather than the game attract. NOT caused by the
+  0x00400000 IOGA shim (0xFF and 0x00 both give the same menu), so the ST-V BIOS reads the
+  test/service switch from a different source (SMPC / other I/O / EEPROM-bookkeeping logic).
+- Next (to reach the game proper): trace where the ST-V BIOS reads test/service each frame
+  (instrument reads in the BIOS service/vblank routine) and shim it to "not held".
+- Screenshot saved: C:\Users\mixio\Downloads\SAROO-STV_bakubaku_render.png
