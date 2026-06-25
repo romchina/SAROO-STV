@@ -1,3 +1,38 @@
+# SAROO-STV
+
+**SAROO-STV 是 [SAROO](#saroo-is-a-hdloader-for-sega-saturn)（土星光驱模拟卡）的一个分叉。目标：在不改 Sega Saturn 主板的前提下，通过 SAROO 卡槽硬件让真 Saturn 启动并运行 Sega ST-V 街机游戏 ROM。**
+
+ST-V（Titan 主板）与 Saturn 的核心硅片几乎完全相同：2× SH-2 @ 28.6MHz、68EC000 声音 CPU、SCU、VDP1、VDP2、SCSP、RAM 规格全同，**CPU 指令、图形命令、声音程序完全二进制兼容**。差异集中在外设——JAMMA I/O（315-5649）、BIOS、93C46 EEPROM、ROM 映射方式。因此理论上：SAROO 把 ST-V 卡带 ROM 映射进 Saturn 的 A-Bus + 仿冒 I/O 外设 + HLE ST-V BIOS，就能在 stock Saturn 上跑 ST-V 游戏。
+
+## 方法：先软件孪生，再上真机
+
+- **软件孪生（PC）**：用 Yabause（stock Saturn 模拟核心）当被验证对象、MAME（`stv`）当真值 oracle，在 PC 上验证「ST-V 游戏能在 Saturn 硅片上执行并渲染」这个核心假设。快速试错、不碰硬件。
+- **真机（SAROO 硬件）**：把孪生上验证过的 ROM 映射 + 外设仿冒 + BIOS HLE 落到 FPGA（EP4CE6）/ STM32（H750），给真 Saturn。真机改不了 mask ROM，故 ST-V BIOS 例程必须 HLE。
+
+完整路线图（Phase 0–5）见 [`docs/STV-ROADMAP.md`](docs/STV-ROADMAP.md)。
+
+## 当前进度
+
+**核心假设已视觉验证**：`bakubaku`（BAKU BAKU ANIMAL）的 ST-V 游戏码在 Yabause（stock Saturn 核心）上真实执行——attract 主循环 + vblank 中断健康运行、不崩；其 **VDP2 attract 背景渲染出来，像素级吻合 MAME** 真机。
+
+| ![twin vs MAME](docs/img/stv-attract-twin-vs-mame.png) |
+|:--:|
+| 左 = MAME（ST-V 真值）  右 = Yabause Saturn 软件孪生。VDP2 背景层逐像素一致。 |
+
+⚠️ 这是**快照回放孪生**（把 MAME 捕获的内存/寄存器状态灌进 Yabause 再续跑），**不是**插卡从头 boot，也**还不可玩**。已知待办：
+
+- **DISP faithful 修复**：当前靠诊断 flag（`STV_FORCE_DISP`）强制 VDP2 显示位；根因是 replay 中 ST-V BIOS 例程 @0x34DE 关掉了 DISP，需 HLE（M-HLE-3）
+- **VDP1 精灵叠加层**：INSERT COIN 文字 / 眼睛 / CREDIT 尚未渲染
+- **从头引导 + 输入/投币**：未做
+- **真机 SAROO HLE 路**：未开始
+
+逆向 / 系统化调试的全过程记录见 [`docs/superpowers/recon/`](docs/superpowers/recon/)。
+
+> 版权说明：ST-V BIOS 与游戏 ROM 受版权保护，**不包含**在本仓库中。软件孪生侧的 Yabause fork 源码独立维护（见 recon 文档）。
+
+---
+
+> 以下为上游 [tpunix/SAROO](https://github.com/tpunix/SAROO) 的原始说明。
 
 ### SAROO is a HDLoader for SEGA Saturn.
 
@@ -73,6 +108,3 @@ Firm_V12使用MDK5编译。
 
 --------
 一些开发中的记录: [SAROO技术点滴](doc/SAROO技术点滴.txt)
-
-
-
