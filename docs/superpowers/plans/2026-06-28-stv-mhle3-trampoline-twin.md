@@ -426,3 +426,52 @@ Update saroo memory: M-HLE-3 twin complete = real-hardware-portable boot path pr
 - **Spec coverage:** trampoline spec's 5 steps → Task 1 (resident+game), Task 2 (ROM routines+HW+sound+regs); runtime 8-routine HLE list → reached as relocated ROM routines (Tasks 2/5), not hand-reimplemented (extracted; clean reimpl deferred per IP note). Handoff invariants → Task 2 Step 4. Portability assertion (no low exec) → Task 5/6 `STV_NOLOW`.
 - **Empirical placeholders are intentional:** `RESIDENT_FRAME`, `GAME_CS0_OFF`, `STV_TRAMP_ENTRY`, the reloc patch table, and the 0x06000D2E literal-pool address are measured in their own steps (commands + expected output provided) rather than guessed — this is reverse-engineering; the measurement IS the task.
 - **Two-stage de-risk:** M1 isolates construction (all but relocation); M2 isolates relocation. A reviewer can reject M2 while keeping M1.
+
+---
+
+## Execution Findings (2026-06-28) — M1 result + M2 revised
+
+**M1 construction VALIDATED, low-placement INFEASIBLE.** `StvTrampoline()` (commit
+`483128bf`) constructs the handoff from extracted resident.bin (HWRAM 0x06000000-EFFF)
++ game.bin (0x0600F000+, the post-IP-load image — the IP load is NOT a raw CS0 copy, the
+fpr program is relocated during load; deferred to Phase 2) + same-frame master regs
+(PC=0x060154C6 main loop). Under `-b saturn-jp-v100.bin` (NO -a) **the game resumes and
+runs the resident BIOS vblank dispatch chain 0x06000D14** = construction correct.
+**But M1's low-placement of ROM routines is impossible:** readback `[0x00000EFC]=2F362F26`
+proves 0x00000000 is **read-only Saturn mask BIOS**. Game crashes at `0x06000D2C`
+(`mov.l @r3,r3` reading `[0x000010E8]`, ST-V BIOS=0x00000EFC, Saturn BIOS=garbage 0x0070FE00).
+=> **M2 relocation is mandatory** (also the exact real-Saturn constraint: mask ROM owns
+low memory). Tasks 1-3 (M1 low-placement) are therefore superseded by M2.
+
+**M2 relocation target = free cart CS0 space (not HWRAM/LWRAM).** Both HWRAM (1MB:
+resident+game) and LWRAM (0x00200000, 256/256 4KB blocks used) are FULL — no free
+executable RAM. **Free executable space = cart CS0 0x03400000+** (bakubaku cart uses to
+0x1400000). Real-HW-faithful: the cart/FPGA provides these routines. **DONE (commit
+`5b1bd36c`): fetchlist now maps all CS0 pages 0x020-0x03F to FetchCs0** (real Saturn
+executes A-Bus; Yabause only mapped page 0x020). RELOC_BASE = `0x03400000`; write
+romroutines to `CartridgeArea->rom` offset `0x1400000` via `T1WriteLong`.
+
+**Patching challenge (the genuine "最难" core).** The resident dispatcher reads function
+pointers from TWO places: (a) **HWRAM slots** ([0x06000640]=0x3744, [0x06000A08/0C/10]=0x44FC,
+[0x06000610]=0x06000D14) — WRITABLE, just rewrite slot = RELOC_BASE+low; (b) **low-ROM
+pointer tables** (~0x000010E0-0x1100: [0x10E8]→0xEFC, [0x10E4]→…) read by resident code
+(`mov.w #0x10E8,r3; mov.l @r3,r3`) — read-only on real HW, must patch the resident CODE.
+In-place code patches are blocked by densely-packed literal pools (no free slots at
+0x06000DC8+). **Revised strategy = relocate the offending routines, not patch in place:**
+the dispatcher is reached only via the writable slot [0x06000610], so **copy the dispatcher
+routine verbatim into spacious CS0 free area, rewrite its low-ROM-pointer reads there (room
+for a fresh literal pool), fix up its low-pointer pool values to RELOC_BASE+low, and set
+[0x06000610] = relocated dispatcher.** PC-relative refs survive verbatim copy (pool moves
+with code); only absolute low refs need fixing. Apply the same to each of the 8 ROM routines
++ their callees. Enumerate every low-ROM data-read site first (extend a probe to log master
+reads of 0x0-0x8000, or static-disasm the resident dispatchers).
+
+**Also pending:** trampoline does not yet load LWRAM (old StvBoot did); the game resumed
+without it to the crash, but reproduce LWRAM for faithfulness (dump exists via STV_DUMPRAM
+now). RELOC internal-pointer fixup: identify which 4-byte values in romroutines are code
+pointers (heuristic: even, <0x8000, point to valid opcode) and add RELOC_BASE.
+
+**Next session entry point:** relocate romroutines to CS0 0x03400000 (+ internal fixup) →
+relocate dispatcher 0x06000D14 to CS0 with patched low-reads → repoint [0x06000610] →
+add `STV_NOLOW` assertion (master PC never <0x80000) → iterate per crash until attract
+renders. Diagnostic: `STV_TRAMP` readback log already shows low-region read-only.
