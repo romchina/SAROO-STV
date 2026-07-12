@@ -73,7 +73,7 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   `f7ddc3e56b19ef5e21fa648d57270a322e6a8ebf`。
 - [x] native SH-2 已实现 `0x0ECC/0x2C64/0x2CAC/0x372C/0x3E4E/
   0x4596/0x4680`，Yabause SH-2 动态测试 11 项全部通过。
-- [x] 固定 service redirect table @ `0x04400300`，构建时校验全部
+- [x] 固定 service redirect table @ `0x04400700`，构建时校验全部
   original→native 地址对。
 - [x] 实现 `0x0EFC` steady-state vblank update；SH-2 动态向量通过。
 - [x] 实现 `0x3842` selector 0/10/1/20 native dispatch；selector 0 动态向量
@@ -88,9 +88,16 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
 ## 第一真机验收步骤
 
 1. Keil 构建并刷入 MCU firmware；Quartus 构建并刷入 FPGA。
-2. 构建 `stv-trampoline/trampoline.bin`，复制到
-   `/SAROO/STV/trampoline.bin`。
-3. 启动 SAROO 菜单，选择“运行 ST-V 镜像”。
-4. 确认装载成功日志包含 size、SDRAM base `0x00400000`、ROM base `4MB`。
-5. SMPC reset 后应由 Saturn IPL 从 CS0 启动并显示 magenta 背景；HWRAM
-   `0x06000000` heartbeat 应为 `0x5AA5A55A`。
+2. SD 卡建立 `/SAROO/STV/`，先复制完整 32 MB 诊断镜像
+   `bakubaku-saroo.bin`，不是单独的 `trampoline.bin`。不需要 ST-V BIOS。
+3. 启动 SAROO 菜单并选择诊断镜像；日志应包含
+   `size=02000000`、SDRAM `00400000`、base `4MB`。
+4. SMPC reset 后应显示 magenta；红屏表示 FPR 复制校验失败。调试器可见时，
+   `0x06000000=0x5AA5A55A` 是成功 heartbeat。
+5. 诊断版通过后，把 `bakubaku-saroo-run.bin` 放入同一目录并运行。它应先建立
+   相同的 magenta 诊断状态，随后离开诊断停机并进入游戏。
+6. 若 run 版失败，保留屏幕表现、串口日志和 master SH-2 寄存器；立即回测诊断版，
+   以区分固件/SDRAM 回归与 game-handoff 问题。
+
+两份镜像均不包含、也不要求 `stv-jp-20091.bin`。Saturn 主板自带 BIOS 只负责
+识别 cart header；ST-V 运行期依赖由 clean resident/native HLE 提供。
