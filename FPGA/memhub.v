@@ -56,6 +56,18 @@ module memhub(
 // bus A                                             //
 ///////////////////////////////////////////////////////
 
+	wire[25:3] cache_addr_a;
+	wire[63:0] cache_data1d_a;
+	wire[ 3:0] cache_valid_a;
+	wire[25:3] cache_addr_b;
+	wire[63:0] cache_data1d_b;
+	wire[ 3:0] cache_valid_b;
+	wire cache_update_b;
+	wire data_valid;
+	wire[15:0] cmd_dout;
+	reg cmd_ack_a;
+	reg cmd_ack_b;
+
 	wire[ 1:0] cmd_req_a;
 	wire cache_invalid_a;
 	wire cache_update_a;
@@ -66,9 +78,6 @@ module memhub(
 		cache_addr_a, cache_data1d_a, cache_valid_a
 	);
 
-	wire[25:3] cache_addr_a;
-	wire[63:0] cache_data1d_a;
-	wire[ 3:0] cache_valid_a;
 	wire data_valid_a = (data_valid==1 && data_ab==0);
 
 	cacheblk _cha(reset, clk,
@@ -85,7 +94,6 @@ module memhub(
 
 	wire[ 1:0] cmd_req_b;
 	wire cache_invalid_b;
-	wire cache_update_b;
 
 	cachebus busb(reset, clk,
 		cs_b, rd_b, wr_b, nwait_b, addr_b, wdata_b, rdata_b,
@@ -94,9 +102,6 @@ module memhub(
 	);
 
 
-	wire[25:3] cache_addr_b;
-	wire[63:0] cache_data1d_b;
-	wire[ 3:0] cache_valid_b;
 	wire data_valid_b = (data_valid==1 && data_ab==1);
 
 	cacheblk _chb(reset, clk,
@@ -118,8 +123,6 @@ module memhub(
 	reg[15:0] cmd_din;
 	reg act_ab;
 	reg data_ab;
-	reg cmd_ack_a;
-	reg cmd_ack_b;
 
 
 	localparam C_IDLE=0, C_WAITACK=1, C_END=2;
@@ -180,14 +183,12 @@ module memhub(
 ///////////////////////////////////////////////////////
 
 	wire cmd_ack;
-	wire data_valid;
-	wire[15:0] cmd_dout;
 	wire[15:0] sd_dout;
 	wire sd_oe;
 
 	tsdram _tsd(
 		reset, clk,
-		ext_refresh, cmd_req, cmd_ack, cmd_mask, cmd_addr, cmd_din, cmd_dout, data_valid,
+		ext_refresh, cmd_req, cmd_ack, cmd_mask, {6'b0, cmd_addr}, cmd_din, cmd_dout, data_valid,
 		sd_cke, sd_cs, sd_ras, sd_cas, sd_we, sd_addr, sd_ba, sd_dqm, sd_data, sd_dout, sd_oe
 	);
 

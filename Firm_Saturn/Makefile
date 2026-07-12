@@ -10,6 +10,8 @@ OBJDUMP = sh-elf-objdump
 OBJCOPY = sh-elf-objcopy
 LDFLAGS	=	-nostartfiles -nostdlib -T ldscript
 FLAGS	=	-Wall -m2 -Os -fomit-frame-pointer -std=c99
+GCC_TOOL_FLAGS ?= $(if $(wildcard /usr/bin/sh-elf-as),-B/usr/bin/sh-elf-,)
+ASFLAGS = --big --isa=sh2
 
 LIBS	=	-lgcc
 
@@ -36,7 +38,7 @@ BUILD_VER:
 	touch version.c
 
 $(EXE)	: $(OBJ)
-		$(CC) $(LDFLAGS) $(OBJ) $(LIBS) -o $(EXE)
+		$(CC) $(GCC_TOOL_FLAGS) $(LDFLAGS) $(OBJ) $(LIBS) -o $(EXE)
 		$(OBJDUMP) -xd $(EXE) > dump.txt
 		$(OBJCOPY) -O binary $(EXE) tmp.bin
 		dd if=/dev/zero  of=ramimage.bin bs=1k count=384
@@ -45,10 +47,10 @@ $(EXE)	: $(OBJ)
 		rm -f tmp.bin
 
 obj/%.o :	%.c
-		$(CC) -c $< -o $@ $(FLAGS)
+		$(CC) $(GCC_TOOL_FLAGS) -c $< -o $@ $(FLAGS)
 
 obj/%.o :	%.S
-		$(AS) $< -o $@
+		$(AS) $(ASFLAGS) $< -o $@
 
 clean	:
 		rm -f obj/*.o

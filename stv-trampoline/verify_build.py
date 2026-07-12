@@ -41,6 +41,8 @@ def main() -> int:
         0x06010000, 0x02201000, 0x0003C000,
         0x4F22B0C3, 0x04400000, 0x04400088,
         0x04400800, 0x06000000, 0xFFFFFE00,
+        0x04401200,
+        0x04401400,
         0x5AA5A55A, 0xDEAD1000,
     )
     for value in required_longs:

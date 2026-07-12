@@ -205,8 +205,6 @@ typedef struct {
 
 u32 crc32(u8 *buf, int len, u32 crc);
 
-u32 get_sr(void);
-void set_sr(u32 sr);
 void install_isr(int type);
 void break_in_game(int break_pc, void *handle);
 void break_in_game_next(int break_pc, void *handle);

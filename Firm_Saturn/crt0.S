@@ -57,6 +57,7 @@ _next_start:
 	! Relocate self
 	mova	_real, r0
 	mov.l	start_ptr, r1
+	.align 2
 _real:
 	shlr8	r0
 	shll8	r0

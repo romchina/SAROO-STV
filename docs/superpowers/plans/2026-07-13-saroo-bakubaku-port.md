@@ -29,10 +29,10 @@
 - [x] 增加 STM32 SDRAM aperture bank `0x32`；解决原 16 MB aperture 回绕。
 - [x] 菜单新增 `/SAROO/STV/*.bin` 列表和 load 命令，成功后发 SMPC `SYSRES`。
 - [x] 把 `stv_rom.c` / `stv_menu.c` 加入 Keil 工程。
-- [x] MCU host tests、FPGA iverilog、Phase-1 trampoline 构建通过。
+- [x] MCU host tests、FPGA iverilog、Saturn menu、Phase-1 trampoline 构建通过。
 - [ ] 用 ARMCLANG/Keil 完整构建 MCU firmware。
-- [ ] 用 SH-2 工具链完整构建 Saturn menu firmware（当前本机 GNU 工程有既有
-      assembler 配置错误，与本次 C 改动无关）。
+- [x] 用 GNU SH-2 工具链完整构建 384 KiB Saturn menu firmware；修正工具前缀、
+      SH-2 big-endian 汇编参数、启动入口 4-byte 对齐和旧头文件声明冲突。
 - [ ] Quartus 综合、烧写和真机 magenta/heartbeat 验证。
 
 ## Phase-2 建议内存图
@@ -69,8 +69,8 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
 - [x] packer 在 image offset `0x1400000` 嵌入 native HLE；trampoline 在
   heartbeat 前调用 `0x04400088` installer。
 - [x] 加入完整 crash capture 与 CS2 IOGA shadow 后，当前诊断 image SHA-1：
-  `c406cd14beefb10eb92bb7de467fcc2dc4748f18`；cold-run image SHA-1：
-  `e15563560fb10490834ba46d620fef0c2b03d976`。
+  `daf3cd2b0e70b9d491be84b418d2ce1ee4f32be5`；cold-run image SHA-1：
+  `7f4ad2e17e869fcc289a55dbfeafeb87d5e820fe`。
 - [x] native SH-2 已实现 `0x0ECC/0x2C64/0x2CAC/0x372C/0x3E4E/
   0x4596/0x4680`，Yabause SH-2 动态测试 11 项全部通过。
 - [x] 固定 service redirect table @ `0x04400700`，构建时校验全部
@@ -89,9 +89,18 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   `tools/stv/decode_crash.py` 离线解析 PC/PR/SR、R0-R14 和控制寄存器。
 - [x] 纠正 IOGA 硬件路由：原 `0x00400000` 无卡槽片选；FPGA/MCU 改用
   CS2 packed port shadow，native VBlank 生成 Baku 的 HWRAM 输入状态。
-- [ ] native SMPC INTBACK 手柄轮询与 JAMMA 映射（必须带超时并验证 VBlank
-  不阻塞；MCU无法直接读取当前 PCB 的 Saturn 手柄总线）。
-- [ ] Quartus/Keil 构建并在现有 SAROO 真机验证 overlay 关闭与 heartbeat。
+- [x] native SMPC INTBACK 改为跨 VBlank 非阻塞状态机；Yabause SH-2 smoke
+  对 idle 与合成按键（方向/A/B/C/X、Start、Coin）均动态通过。
+- [x] 显式 cold hardware baseline：cache purge/off、SCU DMA stop/IMS、VDP1
+  reset、实测 VDP2 cycle pattern、Slave SH-2 park；handoff 前才开放 IMS/SR。
+- [x] EEPROM 边界闭合：1027 帧唯一 PDR2 访问来自已替换的旧 resident poller，
+  Baku 游戏无直接 93C46 运行期依赖；持久化留给需要 PDR 的多游戏层。
+- [x] SCSP 68K reset-vector watcher：检测 Baku 新音频向量后，以非阻塞
+  SNDOFF→SNDON 重启声音 CPU；动态 smoke 验证 `03/07/06` 三条 SMPC 命令。
+- [x] 一键虚拟验收纳入 Saturn menu clean build，并校验 `ramimage.bin` 固定为
+  384 KiB；当前可用开源工具覆盖的构建、静态检查和动态模拟均已闭合。
+- [ ] 安装 Quartus 14/Keil 后完成 vendor build；真机可用时验证 overlay 关闭、
+  heartbeat、视频/声音和物理手柄。当前主机未安装这两套专有工具链。
 
 ## 第一真机验收步骤
 

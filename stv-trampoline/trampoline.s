@@ -91,6 +91,9 @@ alias_entry:
     ! The BIOS transfer descriptor reconstructs FPR+0x1000 at 0x06010000,
     ! leaving a 4 KB SEGA sentinel page at 0x0600F000.  Materialize the same
     ! shifted game layout without executing the BIOS transfer closure.
+    mov.l   hle_hardware_init_ptr, r0
+    jsr     @r0
+    nop
     mov.l   game_page_ptr, r1
     mov.l   sega_word_ptr, r2
     mov.l   sega_long_count_ptr, r3
@@ -120,6 +123,10 @@ call_install:
     ! at it.  This is functional state construction, not a copied BIOS blob.
 call_resident_init:
     mov.l   hle_resident_init_ptr, r0
+    jsr     @r0
+    nop
+    ! Configure Saturn SMPC INTBACK for the native pad-to-JAMMA bridge.
+    mov.l   hle_smpc_pad_init_ptr, r0
     jsr     @r0
     nop
     mov.l   vbr_base_ptr, r0
@@ -218,6 +225,8 @@ game_first_word_ptr:.long 0x4F22B0C3
 hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
 hle_resident_init_ptr:.long 0x04400800
+hle_smpc_pad_init_ptr:.long 0x04401200
+hle_hardware_init_ptr:.long 0x04401400
     .ifdef ENTER_GAME
 hle_bootstrap_ptr:   .long 0x04400A00
     .endif

@@ -26,7 +26,8 @@ done
 
 cd "$ROOT"
 
-for tool in python3 make gcc iverilog vvp sh-elf-as sh-elf-ld sh-elf-objcopy sh-elf-nm; do
+for tool in python3 make gcc iverilog vvp sh-elf-gcc sh-elf-as sh-elf-ld \
+    sh-elf-objcopy sh-elf-objdump sh-elf-nm; do
     command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 2; }
 done
 
@@ -34,6 +35,13 @@ step() { printf '\n==== %s ====\n' "$1"; }
 
 step "packer unit tests"
 python3 -m unittest discover -s tools/stv/tests -v
+
+step "vendor project source membership"
+python3 tools/stv/verify_vendor_projects.py
+
+step "Saturn menu firmware clean build"
+make -C Firm_Saturn clean all
+test "$(wc -c < Firm_Saturn/ramimage.bin)" -eq 393216
 
 step "MCU streaming-loader host tests"
 make -C Firm_MCU/tests clean test
@@ -57,6 +65,13 @@ run = Path("stv-trampoline/trampoline-run.bin").read_bytes()
 assert bytes.fromhex("04400a00") in run, "run trampoline lacks native handoff"
 print("verified game-entry handoff 0x04400A00")
 PY
+
+if [[ -x /root/yabause-stv/build/src/gtk/yabause ]]; then
+    step "native SMPC asynchronous INTBACK smoke"
+    bash tools/stv/run_smpc_smoke.sh /root/yabause-stv
+else
+    step "native SMPC smoke skipped (Yabause twin not installed)"
+fi
 
 if [[ -n "$ROM_DIR" ]]; then
     step "canonical 32 MB image build and verification"

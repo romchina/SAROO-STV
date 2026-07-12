@@ -118,7 +118,7 @@ void reloc_vbr(void)
 {
 	u32 old_vbr = get_vbr();
 	memcpy((void*)new_vtable, (void*)old_vbr, 1024);
-	set_vbr(new_vtable);
+	set_vbr((u32)new_vtable);
 	printk("New VBR at %08x\n", new_vtable);
 }
 

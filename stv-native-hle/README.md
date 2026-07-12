@@ -88,6 +88,24 @@ longs at `0x06002864-0x06002874` and derived system byte at `0x06000730`.
 This indirection is required because the Saturn cartridge bus cannot select the
 ST-V IOGA's original low-bus page at `0x00400000`.
 
+The trampoline calls `stv_smpc_pad_init` at `0x04401200`. VBlank then advances
+`stv_smpc_pad_poll` at `0x04401280` as a non-blocking state machine: one frame
+issues INTBACK and a later frame consumes OREG2/3. A 60-poll timeout resets only
+the pad state and never spins inside the interrupt. Saturn directions/A/B/C/X
+map to ST-V P1, Start maps to Start1, and L maps to Coin1. Yabause smoke images
+execute both idle and synthetic pressed vectors through the real SH-2 code.
+
+`stv_hardware_init` at `0x04401400` purges/disables the master cache, stops SCU
+DMA, masks/clears SCU interrupt state, parks Slave SH-2, resets VDP1 drawing,
+and installs the measured Baku VDP2 cycle pattern. The handoff changes SCU IMS
+to `0xFFFFE1FC` only immediately before it opens SR.
+
+`stv_scsp_sound_poll` at `0x04401600` watches the SCSP 68K reset vector at
+`0x25A00004`. When Baku installs a new valid vector it arbitrates with pad
+INTBACK and advances a non-blocking SNDOFF/SNDON sequence, reproducing the
+Yabause twin's former vector-write restart hook on real Saturn hardware. Both
+commands and the Slave-SH2 park command are required by the dynamic smoke test.
+
 `stv_bootstrap_handoff` reproduces the measured non-returning `0x4114`
 transition: it builds the 32-byte frame at `0x060FFFDC`, restores the observed
 register state (`GBR=0x060D28C8`, `R4=0x120`, `R5=0x20180108`,

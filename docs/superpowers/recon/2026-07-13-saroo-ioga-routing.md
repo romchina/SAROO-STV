@@ -37,9 +37,10 @@ resident 在 VBlank 中读取并转换成游戏已经使用的 HWRAM 输入影�
   `0x06002864–0x06002874` 及派生 system byte `0x06000730`。
 - FPGA testbench、MCU host tests 和 native layout verifier 均覆盖此契约。
 
-## 尚未闭合
+## 输入闭合更新
 
 MCU本身看不到 Saturn 控制器总线；“STM32直接读 Saturn 手柄”不是当前 PCB
-上的可行路径。真实手柄输入应由 Saturn SH-2 通过 SMPC INTBACK 读取，再合并到
-resident 的 HWRAM 输入影子。CS2 IOGA shadow 仍适合 idle、自动测试和外部输入
-注入。下一步应实现带超时的 native SMPC pad poll，并验证它不会阻塞 VBlank。
+上的可行路径。当前 native resident 已实现跨 VBlank 非阻塞 SMPC INTBACK，
+将 Saturn pad 合并到 HWRAM 输入影子；60 次 poll 无完成会重置状态但不会阻塞
+中断。Yabause SH-2 smoke 已动态覆盖 idle 与合成 pressed vectors。CS2 shadow
+继续用于 idle、自动测试和外部输入注入。

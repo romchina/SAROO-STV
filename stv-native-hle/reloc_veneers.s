@@ -1200,6 +1200,12 @@ handoff_stack_loop:
     mov.l   handoff_game_index_1, r0
     mov.l   r0, @(4, r1)
 
+    ! The constructor kept every SCU source masked. Enable only the measured
+    ! game-time set immediately before SR is opened.
+    mov.l   handoff_scu_ims_ptr, r1
+    mov.l   handoff_scu_ims_value, r0
+    mov.l   r0, @r1
+
     mov.l   handoff_gbr, r0
     ldc     r0, gbr
     mov.l   handoff_initial_pr, r0
@@ -1242,6 +1248,8 @@ handoff_r4:          .long 0x00000120
 handoff_r5:          .long 0x20180108
 handoff_r7:          .long 0x45A07058
 handoff_stack_seed_ptr: .long handoff_stack_seed
+handoff_scu_ims_ptr:   .long 0x25FE00A0
+handoff_scu_ims_value: .long 0xFFFFE1FC
 handoff_stack_seed:
     .long 0x39A0500E, 0x00000000, 0x20180108, 0x45A00000
     .long 0x0601025E, 0x00000000, 0x00000000, 0x06010006
@@ -1273,6 +1281,7 @@ stv_resident_vector_get:
     .org 0x1140, 0
     .global stv_resident_input_poll
 stv_resident_input_poll:
+    sts.l   pr, @-r15
     mov.l   ioga_shadow_ab, r0
     mov.w   @r0, r1
     swap.b  r1, r4
@@ -1325,6 +1334,13 @@ stv_resident_input_poll:
     not     r3, r3
     mov.l   ioga_system_dst, r0
     mov.b   r3, @r0
+    mov.l   input_sound_poll_ptr, r0
+    jsr     @r0
+    nop
+    mov.l   input_pad_poll_ptr, r0
+    jsr     @r0
+    nop
+    lds.l   @r15+, pr
     rts
     nop
 
@@ -1338,3 +1354,440 @@ ioga_port_c_dst: .long 0x0600286C
 ioga_port_e_dst: .long 0x06002870
 ioga_port_f_dst: .long 0x06002874
 ioga_system_dst: .long 0x06000730
+input_pad_poll_ptr: .long stv_smpc_pad_poll
+input_sound_poll_ptr: .long stv_scsp_sound_poll
+
+    ! Configure Saturn SMPC for INTBACK pad acquisition. The boot trampoline
+    ! calls this once before entering the game.
+    .org 0x1200, 0
+    .global stv_smpc_pad_init
+stv_smpc_pad_init:
+    mov     #0, r0
+    mov.l   smpc_ireg0_ptr, r1
+    mov.b   r0, @r1
+    add     #2, r1
+    mov     #0x0A, r0
+    mov.b   r0, @r1
+    add     #2, r1
+    mov     #0xF0, r0
+    mov.b   r0, @r1
+    mov     #0, r0
+    mov.l   smpc_ddr1_ptr, r1
+    mov.b   r0, @r1
+    add     #4, r1
+    mov.b   r0, @r1
+    add     #2, r1
+    mov.b   r0, @r1
+    mov.l   smpc_pad_state_ptr_i, r1
+    mov.l   r0, @r1
+    mov.l   smpc_sound_last_ptr_i, r1
+    mov.l   r0, @r1
+    rts
+    nop
+    .align 2
+smpc_ireg0_ptr: .long 0x20100001
+smpc_ddr1_ptr:  .long 0x20100079
+smpc_pad_state_ptr_i: .long 0x06000BE0
+smpc_sound_last_ptr_i:.long 0x06000BE4
+
+    ! Non-blocking INTBACK state machine. One VBlank issues the command; a
+    ! later VBlank consumes OREG2/3. No CPU spin waits on SMPC hardware.
+    .org 0x1280, 0
+    .global stv_smpc_pad_poll
+stv_smpc_pad_poll:
+    mov.l   smpc_sound_state_ptr, r2
+    mov.b   @r2, r0
+    tst     r0, r0
+    bf      smpc_pad_return
+    mov.l   smpc_pad_state_ptr, r1
+    mov.b   @r1, r0
+    tst     r0, r0
+    bf      smpc_pad_pending
+
+    mov.l   smpc_sf_ptr, r2
+    mov.b   @r2, r0
+    tst     #1, r0
+    bf      smpc_pad_return
+    mov     #1, r0
+    mov.b   r0, @r2
+    mov.l   smpc_comreg_ptr, r2
+    mov     #0x10, r0
+    mov.b   r0, @r2
+    mov     #1, r0
+    mov.b   r0, @r1
+    mov     #0, r0
+    mov.b   r0, @(1, r1)
+smpc_pad_return:
+    rts
+    nop
+
+smpc_pad_pending:
+    mov.l   smpc_sf_ptr, r2
+    mov.b   @r2, r0
+    tst     #1, r0
+    bt      smpc_read_pad
+    mov.b   @(1, r1), r0
+    add     #1, r0
+    mov.b   r0, @(1, r1)
+    cmp/eq  #60, r0
+    bf      smpc_pad_return
+    mov     #0, r0
+    mov.b   r0, @r1
+    mov.b   r0, @(1, r1)
+    rts
+    nop
+
+smpc_read_pad:
+    mov     #0, r0
+    mov.b   r0, @r1
+    mov.b   r0, @(1, r1)
+    .ifdef SMPC_TEST_VECTOR
+    mov     #0x5F, r4       ! Left+Up+A+B+C+Start
+    mov     #0x48, r5       ! X+L(coin)
+    bra     smpc_pad_values_ready
+    nop
+    .endif
+    mov.l   smpc_oreg2_ptr, r2
+    mov.b   @r2, r4
+    extu.b  r4, r4
+    not     r4, r4
+    extu.b  r4, r4
+    add     #2, r2
+    mov.b   @r2, r5
+    extu.b  r5, r5
+    not     r5, r5
+    extu.b  r5, r5
+smpc_pad_values_ready:
+    mov.l   smpc_ireg0_ptr_p, r1
+    mov     #0x40, r0
+    mov.b   r0, @r1
+
+    ! Saturn OREG2: R,L,D,U,Start,A,C,B -> ST-V Port A:
+    ! L,R,U,D,button4,button3,button2,button1.
+    mov     #0, r6
+    mov     r4, r0
+    tst     #0x80, r0
+    bt      smpc_no_right
+    mov     #0x40, r0
+    or      r0, r6
+smpc_no_right:
+    mov     r4, r0
+    tst     #0x40, r0
+    bt      smpc_no_left
+    mov     #0x80, r0
+    or      r0, r6
+smpc_no_left:
+    mov     r4, r0
+    tst     #0x20, r0
+    bt      smpc_no_down
+    mov     #0x10, r0
+    or      r0, r6
+smpc_no_down:
+    mov     r4, r0
+    tst     #0x10, r0
+    bt      smpc_no_up
+    mov     #0x20, r0
+    or      r0, r6
+smpc_no_up:
+    mov     r4, r0
+    tst     #0x04, r0
+    bt      smpc_no_a
+    mov     #0x01, r0
+    or      r0, r6
+smpc_no_a:
+    mov     r4, r0
+    tst     #0x01, r0
+    bt      smpc_no_b
+    mov     #0x02, r0
+    or      r0, r6
+smpc_no_b:
+    mov     r4, r0
+    tst     #0x02, r0
+    bt      smpc_no_c
+    mov     #0x04, r0
+    or      r0, r6
+smpc_no_c:
+    mov     r5, r0
+    tst     #0x40, r0
+    bt      smpc_no_x
+    mov     #0x08, r0
+    or      r0, r6
+smpc_no_x:
+    extu.b  r6, r6
+
+    ! Saturn Start -> ST-V Start1, Saturn L -> Coin1.
+    mov     #0, r7
+    mov     r4, r0
+    tst     #0x08, r0
+    bt      smpc_no_start
+    mov     #0x10, r0
+    or      r0, r7
+smpc_no_start:
+    mov     r5, r0
+    tst     #0x08, r0
+    bt      smpc_no_coin
+    mov     #0x01, r0
+    or      r0, r7
+smpc_no_coin:
+
+    mov.l   smpc_port_a_dst, r1
+    mov.l   @r1, r4
+    or      r6, r4
+    mov.l   r4, @r1
+    mov.l   smpc_port_c_dst, r1
+    mov.l   @r1, r6
+    or      r7, r6
+    mov.l   r6, @r1
+
+    ! Recompute the derived system byte after merging the Saturn pad.
+    mov.l   smpc_port_b_dst, r1
+    mov.l   @r1, r5
+    mov     r4, r0
+    shlr    r0
+    and     #4, r0
+    mov     r0, r3
+    mov     r6, r0
+    and     #3, r0
+    or      r0, r3
+    mov     r5, r0
+    and     #8, r0
+    or      r0, r3
+    not     r3, r3
+    mov.l   smpc_system_dst, r1
+    mov.b   r3, @r1
+    rts
+    nop
+
+    .align 2
+smpc_sf_ptr:       .long 0x20100063
+smpc_comreg_ptr:   .long 0x2010001F
+smpc_oreg2_ptr:    .long 0x20100025
+smpc_ireg0_ptr_p:  .long 0x20100001
+smpc_port_a_dst:   .long 0x06002864
+smpc_port_b_dst:   .long 0x06002868
+smpc_port_c_dst:   .long 0x0600286C
+smpc_system_dst:   .long 0x06000730
+smpc_pad_state_ptr:.long 0x06000BE0
+smpc_sound_state_ptr:.long 0x06000BE2
+
+    ! Deterministic cold hardware baseline. Avoid inheriting Saturn BIOS or
+    ! emulator defaults: stop SCU DMA, mask interrupts, park Slave SH-2, reset
+    ! VDP1 drawing, and program the measured Baku VDP2 cycle layout with DISP
+    ! held off until the trampoline diagnostics/game transition.
+    .org 0x1400, 0
+    .global stv_hardware_init
+stv_hardware_init:
+    sts.l   pr, @-r15
+    mov.l   hw_cache_ccr, r1
+    mov     #0x10, r0
+    mov.b   r0, @r1       ! purge address/data cache arrays
+    mov     #0, r0
+    mov.b   r0, @r1       ! deterministic cache-off handoff
+    mov.l   hw_scu_d0en, r1
+    mov.l   r0, @r1
+    mov.l   hw_scu_d1en, r1
+    mov.l   r0, @r1
+    mov.l   hw_scu_d2en, r1
+    mov.l   r0, @r1
+    mov.l   hw_scu_dstp, r1
+    mov     #7, r0
+    mov.l   r0, @r1
+    mov.l   hw_scu_ims, r1
+    mov     #-1, r0
+    mov.l   r0, @r1
+    mov.l   hw_scu_ist, r1
+    mov.l   r0, @r1
+
+    mov     #0, r0
+    mov.l   hw_vdp1_base, r1
+    mov.w   r0, @r1
+    mov.w   r0, @(2, r1)
+    mov.w   r0, @(4, r1)
+    mov.w   r0, @(6, r1)
+    mov.w   r0, @(8, r1)
+    mov.w   r0, @(10, r1)
+
+    mov.l   hw_vdp2_base, r1
+    mov.w   r0, @r1
+    mov.w   r0, @(2, r1)
+    mov.w   hw_ramctl, r0
+    mov.w   r0, @(14, r1)
+    mov.l   hw_cycle_values_ptr, r2
+    mov     #8, r3
+    add     #0x10, r1
+hw_cycle_copy:
+    mov.w   @r2+, r0
+    mov.w   r0, @r1
+    add     #2, r1
+    dt      r3
+    bf      hw_cycle_copy
+    mov     #0, r0
+    mov.l   hw_vdp2_bgon, r1
+    mov.w   r0, @r1
+
+    ! Saturn BIOS may have left Slave SH-2 active. Park it for the current
+    ! verified single-master Baku path; no fabricated slave entry is started.
+    mov     #3, r4
+    mov.l   hw_smpc_command_ptr, r0
+    jsr     @r0
+    nop
+    lds.l   @r15+, pr
+    rts
+    nop
+
+    .align 2
+hw_scu_d0en: .long 0x25FE0010
+hw_cache_ccr:.long 0xFFFFFE92
+hw_scu_d1en: .long 0x25FE0030
+hw_scu_d2en: .long 0x25FE0050
+hw_scu_dstp: .long 0x25FE0060
+hw_scu_ims:  .long 0x25FE00A0
+hw_scu_ist:  .long 0x25FE00A4
+hw_vdp1_base:.long 0x25D00000
+hw_vdp2_base:.long 0x25F80000
+hw_vdp2_bgon:.long 0x25F80020
+hw_smpc_command_ptr: .long stv_smpc_command
+hw_cycle_values_ptr: .long hw_cycle_values
+hw_ramctl:   .word 0x1000
+hw_cycle_values:
+    .word 0x4455, 0x77FF, 0xFFFF, 0xFFFF
+    .word 0x3036, 0x0112, 0xFFFF, 0xFFFF
+    .align 2
+
+    ! Bounded synchronous SMPC command helper. R4=command, R0=0 success/-1
+    ! timeout. Used only during trampoline construction, never from game code.
+    .org 0x1500, 0
+    .global stv_smpc_command
+stv_smpc_command:
+    mov.l   smpc_cmd_sf, r2
+    mov.w   smpc_cmd_timeout, r3
+smpc_cmd_wait_idle:
+    mov.b   @r2, r0
+    tst     #1, r0
+    bt      smpc_cmd_issue
+    dt      r3
+    bf      smpc_cmd_wait_idle
+    mov     #-1, r0
+    rts
+    nop
+smpc_cmd_issue:
+    mov     #1, r0
+    mov.b   r0, @r2
+    mov.l   smpc_cmd_comreg, r1
+    mov.b   r4, @r1
+    mov.w   smpc_cmd_timeout, r3
+smpc_cmd_wait_done:
+    mov.b   @r2, r0
+    tst     #1, r0
+    bt      smpc_cmd_ok
+    dt      r3
+    bf      smpc_cmd_wait_done
+    mov     #-1, r0
+    rts
+    nop
+smpc_cmd_ok:
+    mov     #0, r0
+    rts
+    nop
+    .align 2
+smpc_cmd_sf:      .long 0x20100063
+smpc_cmd_comreg:  .long 0x2010001F
+smpc_cmd_timeout: .word 0x4000
+    .align 2
+
+    ! Real Saturn does not automatically reset the SCSP 68K when the game
+    ! replaces its reset vector. Detect a new valid vector and sequence
+    ! SNDOFF -> SNDON asynchronously, sharing SMPC with the pad state machine.
+    .org 0x1600, 0
+    .global stv_scsp_sound_poll
+stv_scsp_sound_poll:
+    mov.l   sound_state_ptr, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #1, r0
+    bt      sound_wait_off
+    cmp/eq  #2, r0
+    bt      sound_wait_on
+
+    mov.l   sound_pad_state_ptr, r2
+    mov.b   @r2, r0
+    tst     r0, r0
+    bf      sound_return
+    mov.l   sound_sf_ptr, r2
+    mov.b   @r2, r0
+    tst     #1, r0
+    bf      sound_return
+    mov.l   sound_vector_ptr, r2
+    mov.l   @r2, r4
+    tst     r4, r4
+    bt      sound_return
+    mov.l   sound_vector_limit, r2
+    cmp/hs  r2, r4
+    bt      sound_return
+    mov.l   sound_last_ptr, r2
+    mov.l   @r2, r3
+    cmp/eq  r3, r4
+    bt      sound_return
+    mov.l   r4, @r2
+    mov     #7, r4
+    mov.l   sound_sf_ptr, r2
+    mov     #1, r0
+    mov.b   r0, @r2
+    mov.l   sound_comreg_ptr, r2
+    mov.b   r4, @r2
+    mov     #1, r0
+    mov.b   r0, @r1
+    mov     #0, r0
+    mov.b   r0, @(1, r1)
+sound_return:
+    rts
+    nop
+
+sound_wait_off:
+    mov.l   sound_sf_ptr, r2
+    mov.b   @r2, r0
+    tst     #1, r0
+    bf      sound_age_tick
+    mov     #6, r4
+    mov     #1, r0
+    mov.b   r0, @r2
+    mov.l   sound_comreg_ptr, r2
+    mov.b   r4, @r2
+    mov     #2, r0
+    mov.b   r0, @r1
+    mov     #0, r0
+    mov.b   r0, @(1, r1)
+    rts
+    nop
+
+sound_wait_on:
+    mov.l   sound_sf_ptr, r2
+    mov.b   @r2, r0
+    tst     #1, r0
+    bf      sound_age_tick
+    mov     #0, r0
+    mov.b   r0, @r1
+    mov.b   r0, @(1, r1)
+    rts
+    nop
+
+sound_age_tick:
+    mov.b   @(1, r1), r0
+    add     #1, r0
+    mov.b   r0, @(1, r1)
+    cmp/eq  #60, r0
+    bf      sound_return
+    mov     #0, r0
+    mov.b   r0, @r1
+    mov.b   r0, @(1, r1)
+    rts
+    nop
+
+    .align 2
+sound_state_ptr:    .long 0x06000BE2
+sound_pad_state_ptr:.long 0x06000BE0
+sound_last_ptr:     .long 0x06000BE4
+sound_vector_ptr:   .long 0x25A00004
+sound_vector_limit: .long 0x00080000
+sound_sf_ptr:       .long 0x20100063
+sound_comreg_ptr:   .long 0x2010001F

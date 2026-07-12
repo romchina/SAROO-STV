@@ -48,6 +48,11 @@ def main() -> int:
         "stv_resident_handler_get": 0x04401100,
         "stv_resident_vector_get": 0x04401120,
         "stv_resident_input_poll": 0x04401140,
+        "stv_smpc_pad_init": 0x04401200,
+        "stv_smpc_pad_poll": 0x04401280,
+        "stv_hardware_init": 0x04401400,
+        "stv_smpc_command": 0x04401500,
+        "stv_scsp_sound_poll": 0x04401600,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -77,7 +82,15 @@ def main() -> int:
                   0x06000A00, 0x06000B80, 0x06035278, 0xDEADE001,
                   0x25807020, 0x25807022, 0x25807024,
                   0x06002864, 0x06002868, 0x0600286C,
-                  0x06002870, 0x06002874, 0x06000730):
+                  0x06002870, 0x06002874, 0x06000730,
+                  0x20100001, 0x2010001F, 0x20100025,
+                  0x20100063, 0x20100079,
+                  0x25FE0010, 0x25FE0030, 0x25FE0050,
+                  0x25FE0060, 0x25FE00A0, 0x25FE00A4,
+                  0x25D00000, 0x25F80000, 0x25F80020,
+                  0xFFFFE1FC, 0xFFFFFE92,
+                  0x06000BE0, 0x06000BE2, 0x06000BE4,
+                  0x25A00004, 0x00080000):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 

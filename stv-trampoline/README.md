@@ -22,16 +22,18 @@ image in HWRAM and only afterwards calls the native-HLE installer at
 3. Fills `0x0600F000..0x0600FFFF` with the `SEGA` sentinel word.
 4. Uses the native CS1 long-copy service at `0x04400000` to copy `0xF0000`
    bytes from FPR `0x02201000` to `0x06010000`.
-5. Installs the two game relocation veneers after the FPR copy.
-6. Calls the clean resident constructor at `0x04400800`, then loads
+5. Runs deterministic cache/SCU/VDP/Slave-SH2 initialization.
+6. Installs the two game relocation veneers after the FPR copy.
+7. Calls the clean resident constructor at `0x04400800`, initializes the
+   asynchronous SMPC pad bridge, then loads
    `VBR=0x06000000` and `GBR=0xFFFFFE00`.
-7. Verifies the first copied game word at `0x06010000` is `0x4F22B0C3`
+8. Verifies the first copied game word at `0x06010000` is `0x4F22B0C3`
    (FPR offset `0x1000`).
-8. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
+9. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
    Mednafen save-state dump even without visible VDP2 output).
-9. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
+10. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
    turn the display on with a bright magenta back-screen.
-10. Halts in a `nop ; bra halt ; nop` loop.
+11. Halts in a `nop ; bra halt ; nop` loop.
 
 If the copy verification fails, the heartbeat is `0xDEAD1000` and the
 back-screen is red instead of magenta.
@@ -144,12 +146,11 @@ being stabilized.
 0x1E4  end (484 bytes total; still well inside the 4 KB overlay)
 ```
 
-## Known limitations (explicit Phase-1 cut)
+## Known limitations
 
-- Slave SH-2 is not parked cleanly; it runs whatever it boots with.
-- No CPU cache init, no SCU init, no VDP1 init.
+- Slave SH-2 is deliberately parked; the verified Baku path is master-only.
 - VDP2 display mode defaults to NTSC 320x224 without explicit cycle
-  patterns; may look different from your TV's expectation.
+  timing validation on physical video output.
 - Heartbeat word is byte-swapped per Saturn big-endian conventions
   but there's no verification loop (wouldn't reach it anyway).
 - No hex dump of ROM contents yet — the original Phase-1 plan

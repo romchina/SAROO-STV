@@ -57,5 +57,8 @@ the same command also rebuilds and verifies both 32 MB hardware candidates:
 
 On Linux/WSL, invoke `bash tools/stv/verify_virtual.sh` directly and pass
 `--rom-dir` / `--output-dir` when canonical image generation is wanted.  A
-run without ROM data still checks the packer with synthetic fixtures, the MCU
-loader, FPGA mapping, native HLE layout, and both trampoline variants.
+run without ROM data still checks the packer with synthetic fixtures, a clean
+Saturn menu firmware build, the MCU loader, FPGA mapping, native HLE layout,
+and both trampoline variants. When
+the local Yabause twin exists at `/root/yabause-stv`, it also executes native
+SH-2 asynchronous SMPC smoke tests for idle and synthetic pressed-pad vectors.
