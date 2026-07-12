@@ -44,3 +44,20 @@ STV_AUTOPLAY=1 STV_CLEAN_HLE=1 STV_NOLOW=1 STV_SHOT=300 \
 持续处理中断并渲染，不再需要执行 ST-V BIOS ROM。它还没有消除 MAME 快照，
 也没有完成 `0x3842` 的其他 selector、真正的 `0x4114` boot 构造以及其余服务闭包。
 下一步应扩大自动游玩帧数，让运行轨迹逐个暴露剩余 selector / 服务入口。
+
+## 延长回归与崩溃修复
+
+frame 300 首帧验证后，延长运行曾在 `PC=0x06038704` 报
+`Master SH2 invalid opcode`。根因是 snapshot 路径错误复用了 trampoline 的
+GBR 重定向方案，把 `0x06038704` 当作空闲指针槽写入 `0x00003E4E`；完整 attract
+快照中该地址实际是游戏代码。已从 `StvHleInstallRedirects()` 删除
+`0x06038704`、`0x060105E0` 和 `0x060134B0` 三组 snapshot 不需要的 game-site
+补丁，只保留 resident dispatcher 重定向。
+
+随后自动游玩又触达 `0x3842` selector `0x01` 和 `0x20`，现已实现 delta 累加
+与 range 更新分支。最终相同配置连续运行 120 秒，结果为：
+
+- 无 `STV_INVALID`；
+- 无 `LOWEDGE` / `LOWPC`；
+- 无新的 unimplemented HLE entry；
+- vblank 与标题画面持续运行。
