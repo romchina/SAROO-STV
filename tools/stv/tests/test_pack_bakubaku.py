@@ -69,6 +69,21 @@ class PackBakuBakuTests(unittest.TestCase):
             pack.build_image(self.directory, verify_hashes=False,
                              boot_overlay=b"SEGA SEGASATURN " + bytes(0x1000))
 
+    def test_native_hle_is_embedded_at_cs1_offset(self):
+        hle = bytes((i * 29) & 0xFF for i in range(192))
+        image, manifest = pack.build_image(
+            self.directory, verify_hashes=False, native_hle=hle)
+        self.assertEqual(image[0x01400000:0x01400000 + len(hle)], hle)
+        self.assertTrue(manifest["native_hle"]["enabled"])
+        self.assertEqual(manifest["native_hle"]["saturn_start"], "0x04400000")
+        self.assertEqual(manifest["native_hle"]["sha1"],
+                         hashlib.sha1(hle).hexdigest())
+
+    def test_oversize_native_hle_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exceeds"):
+            pack.build_image(self.directory, verify_hashes=False,
+                             native_hle=bytes(0x10001))
+
     def test_noncanonical_hash_is_rejected_by_default(self):
         with self.assertRaisesRegex(ValueError, "SHA-1"):
             pack.build_image(self.directory)

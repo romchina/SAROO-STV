@@ -39,3 +39,16 @@ SAROO v1.x 原理图中，FPGA 只连接 AA0-AA23；AA24、AA25 到达卡槽连�
 大量偶然形似 `0x03xxxxxx` 的字节做危险的全局替换。
 
 临时 Yabause 埋点在枚举后已撤销。
+
+## Native veneer 验证
+
+`stv-native-hle` 已把两个例程实现为 CS1 原生 SH-2 代码：
+
+- `0x04400000`：long-copy source relocation；
+- `0x04400034`：overlap-safe memmove source relocation；
+- `0x04400088`：向 `0x0604AFD4` / `0x06053C98` 写绝对 jump stub 的安装器。
+
+Yabause twin 临时改为与现有 PCB 相同的 CS0 16 MB 回绕和 CS1 高窗口，加载该
+192-byte binary 并实际由 SH-2 执行。70 秒自动游玩期间没有 invalid opcode、
+LOWPC/LOWEDGE 或 unknown HLE；CS1 trace 确认原 `0x033B96CB` 数据读取变为
+image offset `0x13B96CB`。临时 twin 修改在验证后已全部撤销。

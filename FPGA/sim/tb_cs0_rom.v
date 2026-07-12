@@ -107,6 +107,29 @@ module tb_cs0_rom;
         end
     endtask
 
+    task ss_read_cs1_16;
+        input  [23:0] addr;
+        output [15:0] data;
+        integer k;
+        begin
+            @(posedge CLK_50M);
+            SS_ADDR = addr;
+            SS_CS1  = 1'b0;
+            SS_RD   = 1'b0;
+            repeat(6) @(posedge CLK_50M);
+            k = 0;
+            while(SS_WAIT !== 1'b1 && k < 200) begin
+                @(posedge CLK_50M);
+                k = k + 1;
+            end
+            @(posedge CLK_50M);
+            data = SS_DATA;
+            SS_CS1 = 1'b1;
+            SS_RD  = 1'b1;
+            repeat(6) @(posedge CLK_50M);
+        end
+    endtask
+
     // Saturn-side read cycle. Uses blocking assignments so stimulus
     // takes effect immediately and the WAIT poll sees fresh state.
     task ss_read16;
@@ -223,6 +246,14 @@ module tb_cs0_rom;
             $display("[TB] PASS ST-V CS1 addr=0x%07x", dut.ss_ram_addr);
         end
         SS_CS1 = 1'b1;
+        repeat(8) @(posedge CLK_50M);
+        // Native HLE image offset 0x1400034 is CS1 offset 0x400034;
+        // with ROM SDRAM base 4 MB the physical byte address is 0x1800034.
+        // This simplified model ignores high row/bank bits, flattening that
+        // address to word 0x1a.
+        sdram.mem[20'h0001a] = 16'h11D0; // byte-swap of SH-2 opcode 0xD011
+        ss_read_cs1_16(24'h400034, got);
+        check_eq16("CS1 native HLE opcode @0x04400034", got, 16'hD011);
         release dut.st_reg_ctrl;
         force dut.ss_rom_base = 16'h0000;
         repeat(4) @(posedge CLK_50M);

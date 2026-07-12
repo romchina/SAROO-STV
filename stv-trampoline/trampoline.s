@@ -80,6 +80,14 @@ alias_entry:
     mov     #0, r0
     mov.w   r0, @r1
 
+    ! Execute the first native-HLE boot hook through CS1.  It installs the
+    ! two Baku source-relocation jump stubs in HWRAM.  The Phase-1 image does
+    ! not enter the game yet, but reaching the magenta screen after this call
+    ! proves CS1 executable fetch and HWRAM patch writes both worked.
+    mov.l   hle_install_ptr, r0
+    jsr     @r0
+    nop
+
     ! SR = 0xF0 : block all interrupts (IMASK = 0xF)
     mov     #0xF0, r0
     ldc     r0, sr
@@ -133,6 +141,7 @@ wram_base_ptr:      .long 0x06000000
 heartbeat_val_ptr:  .long 0x5AA5A55A
 alias_entry_ptr:    .long alias_entry + 0x02F00000
 overlay_ctrl_ptr:   .long 0x2580701C
+hle_install_ptr:    .long 0x04400088
 vdp2_tvmd_ptr:      .long 0x25F80000
 vdp2_bgon_ptr:      .long 0x25F80020
 vdp2_bktau_ptr:     .long 0x25F800AC

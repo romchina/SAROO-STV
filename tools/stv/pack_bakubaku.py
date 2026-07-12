@@ -41,7 +41,8 @@ def _word_swap(data: bytes) -> bytes:
 
 
 def build_image(directory: Path, verify_hashes: bool = True,
-                boot_overlay: bytes | None = None) -> tuple[bytes, dict]:
+                boot_overlay: bytes | None = None,
+                native_hle: bytes | None = None) -> tuple[bytes, dict]:
     """Return the canonical 32 MB cart image and deterministic manifest."""
     directory = Path(directory)
     loaded = {
@@ -67,6 +68,11 @@ def build_image(directory: Path, verify_hashes: bool = True,
             raise ValueError("boot overlay lacks Saturn hardware ID")
         image[0x01F00000:0x01F00000 + len(boot_overlay)] = boot_overlay
 
+    if native_hle is not None:
+        if len(native_hle) > 0x10000:
+            raise ValueError("native HLE exceeds 64 KB")
+        image[0x01400000:0x01400000 + len(native_hle)] = native_hle
+
     manifest = {
         "format": "saroo-stv-cart-v1",
         "game": "bakubaku",
@@ -78,6 +84,14 @@ def build_image(directory: Path, verify_hashes: bool = True,
             "max_size": "0x00001000",
             "sha1": (hashlib.sha1(boot_overlay).hexdigest()
                      if boot_overlay is not None else None),
+        },
+        "native_hle": {
+            "enabled": native_hle is not None,
+            "saturn_start": "0x04400000",
+            "image_offset": "0x01400000",
+            "max_size": "0x00010000",
+            "sha1": (hashlib.sha1(native_hle).hexdigest()
+                     if native_hle is not None else None),
         },
         "source_sha1": {
             name: hashlib.sha1(loaded[name]).hexdigest()
@@ -114,10 +128,14 @@ def main() -> int:
                         help="development only: accept noncanonical ROM hashes")
     parser.add_argument("--boot-overlay", type=Path,
                         help="Saturn-header trampoline, at most 4 KB")
+    parser.add_argument("--native-hle", type=Path,
+                        help="SH-2 native HLE image, at most 64 KB")
     args = parser.parse_args()
 
     overlay = args.boot_overlay.read_bytes() if args.boot_overlay else None
-    image, manifest = build_image(args.rom_directory, not args.skip_hash, overlay)
+    hle = args.native_hle.read_bytes() if args.native_hle else None
+    image, manifest = build_image(args.rom_directory, not args.skip_hash,
+                                  overlay, hle)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(image)
     manifest_path = args.output.with_suffix(args.output.suffix + ".json")

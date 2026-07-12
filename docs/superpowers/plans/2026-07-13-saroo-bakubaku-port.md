@@ -62,10 +62,16 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
 - [x] 确定性 Baku packer：大小/SHA-1 校验、MAME 布局、JSON manifest。
 - [x] CS0 低 4 KB boot overlay、CS1 永久 alias、Saturn 侧关闭 latch。
 - [x] trampoline 跳至 `0x04F00106` 并关闭 overlay 后显示 heartbeat。
-- [x] 真实 ROM 生成 32 MB 候选 image；SHA-1
-  `4146d44c2681a57142932833d7636a2c0ec66695`。
+- [x] 真实 ROM 生成 32 MB 候选 image。
 - [x] 70 秒 twin trace 把 MPR4 重定位收敛到两个 copy veneer。
-- [ ] 把两个 source relocation veneer 合入 clean native HLE。
+- [x] 两个 source relocation veneer 合入 192-byte clean native HLE，并在
+  模拟 SAROO CS0/CS1 分窗的 twin 中原生执行 70 秒。
+- [x] packer 在 image offset `0x1400000` 嵌入 native HLE；trampoline 在
+  heartbeat 前调用 `0x04400088` installer。
+- [x] 当前组合 image SHA-1：
+  `fb4a533b3f1821305fa4f453cf31332d9f8e318b`。
+- [ ] 把其余 8 个运行期 clean-HLE 服务改写为 native SH-2。
+- [ ] clean 重写 HWRAM resident/向量/派发层并完成冷启动交接态。
 - [ ] Quartus/Keil 构建并在现有 SAROO 真机验证 overlay 关闭与 heartbeat。
 
 ## 第一真机验收步骤
