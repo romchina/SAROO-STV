@@ -33,6 +33,17 @@ def main() -> int:
         "stv_resident_exception": 0x04400900,
         "stv_bootstrap_handoff": 0x04400A00,
         "stv_handler_table_update": 0x04400A40,
+        "stv_resident_mask_set": 0x04400B00,
+        "stv_resident_mask_update": 0x04400B20,
+        "stv_resident_clock_dispatch": 0x04400B40,
+        "stv_resident_queue_pop": 0x04400B60,
+        "stv_resident_system_flag": 0x04400BA0,
+        "stv_resident_strided_dispatch": 0x04400BE0,
+        "stv_resident_vector_set": 0x04400C40,
+        "stv_resident_handler_set": 0x04400C80,
+        "stv_resident_copy_128": 0x04400CC0,
+        "stv_resident_copy_20": 0x04400D00,
+        "stv_install_resident_veneers": 0x04400E00,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -81,6 +92,34 @@ def main() -> int:
     )
     if raw[0x700:0x700 + len(table)] != table:
         raise SystemExit("service redirect table contents mismatch")
+
+    veneer_match = re.search(
+        r"^([0-9a-fA-F]+)\s+\w\s+resident_veneer_table$",
+        symbols, re.MULTILINE)
+    if not veneer_match:
+        raise SystemExit("missing resident veneer metadata")
+    veneer_offset = int(veneer_match.group(1), 16) - 0x04400000
+    veneer_records = (
+        (0x06000D14, 0x04400B40),
+        (0x06001198, 0x04400B60),
+        (0x0600120E, 0x04400BA0),
+        (0x06001412, 0x04400BE0),
+        (0x06001494, 0x04400C40),
+        (0x060014A8, 0x04400C80),
+        (0x060014C0, 0x04400CC0),
+        (0x060014E0, 0x04400D00),
+        (0x00000000, 0x00000000),
+    )
+    veneer_table = b"".join(
+        address.to_bytes(4, "big") + target.to_bytes(4, "big")
+        for address, target in veneer_records
+    )
+    if raw[veneer_offset:veneer_offset + len(veneer_table)] != veneer_table:
+        raise SystemExit("resident veneer metadata mismatch")
+
+    for opcode in (0xD007, 0xD006, 0x402B, 0x0009):
+        if opcode.to_bytes(2, "big") not in raw[0xE00:0xF00]:
+            raise SystemExit(f"compact resident opcode absent: {opcode:#06x}")
 
     print("verified", len(raw), "bytes", required)
     return 0

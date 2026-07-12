@@ -644,6 +644,14 @@ resident_exception_loop:
     mov.l   resident_callback_648, r1
     mov.l   r0, @r1
 
+    ! Baku calls the 0x426C transition through this slot while pending != 0.
+    mov.l   resident_transition_slot, r1
+    mov.l   resident_transition_ptr, r0
+    mov.l   r0, @r1
+    mov.l   resident_transition_pending, r1
+    mov     #1, r0
+    mov.l   r0, @r1
+
     mov.l   resident_handler_a00, r1
     mov.l   resident_game_vblank, r0
     mov.l   r0, @r1
@@ -655,6 +663,11 @@ resident_exception_loop:
     mov.l   r0, @r1
     mov.l   r0, @(4, r1)
     mov.l   r0, @(8, r1)
+    sts.l   pr, @-r15
+    mov.l   resident_veneer_installer_ptr, r0
+    jsr     @r0
+    nop
+    lds.l   @r15+, pr
     rts
     nop
 
@@ -667,6 +680,8 @@ resident_service_610:     .long 0x06000610
 resident_callback_640:    .long 0x06000640
 resident_callback_644:    .long 0x06000644
 resident_callback_648:    .long 0x06000648
+resident_transition_slot: .long 0x06000320
+resident_transition_pending: .long 0x06000324
 resident_handler_a00:     .long 0x06000A00
 resident_handler_a04:     .long 0x06000A04
 resident_handler_a08:     .long 0x06000A08
@@ -677,6 +692,8 @@ resident_clock_ptr:       .long stv_vblank_clock_update
 resident_noop_ptr:        .long stv_resident_noop
 resident_game_vblank:     .long 0x06035278
 resident_game_aux:        .long 0x06035C48
+resident_transition_ptr:  .long stv_handler_table_update
+resident_veneer_installer_ptr: .long stv_install_resident_veneers
 
     .org 0x900, 0
     .global stv_resident_exception
@@ -789,3 +806,284 @@ stv_handler_table_update:
 handler_pending_ptr: .long 0x06000324
 handler_status_ptr:  .long 0x06000824
 handler_r5_value:    .long 0x06000C34
+
+! ---------------------------------------------------------------------------
+! Native implementations of the HWRAM resident entry points reached directly
+! from Baku Baku game code.  The installer below places clean absolute jump
+! stubs at their original HWRAM addresses.
+! ---------------------------------------------------------------------------
+    .org 0xB00, 0
+    .global stv_resident_mask_set
+stv_resident_mask_set:
+    mov.l   resident_mask_shadow, r3
+    mov.l   r4, @r3
+    mov.l   resident_scu_ims, r3
+    mov.l   r4, @r3
+    rts
+    nop
+    .align 2
+resident_mask_shadow: .long 0x06000348
+resident_scu_ims:     .long 0x25FE00A0
+
+    .org 0xB20, 0
+    .global stv_resident_mask_update
+stv_resident_mask_update:
+    mov.l   resident_mask_shadow_u, r7
+    mov.l   @r7, r6
+    or      r5, r6
+    and     r4, r6
+    mov.l   r6, @r7
+    mov.l   resident_scu_ims_u, r3
+    mov.l   r6, @r3
+    rts
+    nop
+    .align 2
+resident_mask_shadow_u: .long 0x06000348
+resident_scu_ims_u:     .long 0x25FE00A0
+
+    .org 0xB40, 0
+    .global stv_resident_clock_dispatch
+stv_resident_clock_dispatch:
+    mov.l   resident_clock_native, r0
+    jmp     @r0
+    nop
+    .align 2
+resident_clock_native: .long stv_vblank_clock_update
+
+    .org 0xB60, 0
+    .global stv_resident_queue_pop
+stv_resident_queue_pop:
+    mov.l   resident_queue_base, r5
+    mov     #0x5E, r0
+    mov.b   @(r0, r5), r4
+    mov     #0x5F, r0
+    mov.b   @(r0, r5), r3
+    cmp/eq  r3, r4
+    bf      resident_queue_available
+    rts
+    mov     #0, r0
+resident_queue_available:
+    mov     r4, r0
+    add     #1, r0
+    and     #0x0F, r0
+    mov     #0x5E, r1
+    add     r5, r1
+    mov.b   r0, @r1
+    mov     r5, r0
+    add     #0x70, r0
+    mov.b   @(r0, r4), r0
+    rts
+    nop
+    .align 2
+resident_queue_base: .long 0x06000700
+
+    .org 0xBA0, 0
+    .global stv_resident_system_flag
+stv_resident_system_flag:
+    mov     r4, r0
+    cmp/eq  #0, r0
+    bt      resident_flag_clear_bit
+    cmp/eq  #1, r0
+    bt      resident_flag_clear_word
+    rts
+    nop
+resident_flag_clear_bit:
+    mov.l   resident_flag_long_ptr, r1
+    mov.l   @r1, r3
+    mov     #-33, r2
+    and     r2, r3
+    mov.l   r3, @r1
+    rts
+    nop
+resident_flag_clear_word:
+    mov.l   resident_flag_word_ptr, r1
+    mov     #0, r2
+    mov.w   r2, @r1
+    rts
+    nop
+    .align 2
+resident_flag_long_ptr: .long 0x06000824
+resident_flag_word_ptr: .long 0x06000820
+
+    .org 0xBE0, 0
+    .global stv_resident_strided_dispatch
+stv_resident_strided_dispatch:
+    mov     r4, r0
+    cmp/eq  #0, r0
+    bt      resident_strided_read_word
+    cmp/eq  #1, r0
+    bt      resident_strided_read_long
+    cmp/eq  #2, r0
+    bt      resident_strided_write_word
+    cmp/eq  #3, r0
+    bt      resident_strided_write_long
+    rts
+    nop
+resident_strided_read_word:
+    add     #1, r5
+    mov.b   @r5, r0
+    extu.b  r0, r0
+    shll8   r0
+    add     #2, r5
+    mov.b   @r5, r1
+    extu.b  r1, r1
+    or      r1, r0
+    rts
+    nop
+resident_strided_read_long:
+    mov     r5, r4
+    bra     stv_read_strided_long
+    nop
+resident_strided_write_word:
+    add     #3, r5
+    mov.b   r6, @r5
+    shlr8   r6
+    add     #-2, r5
+    mov.b   r6, @r5
+    rts
+    nop
+resident_strided_write_long:
+    mov     r5, r4
+    mov     r6, r5
+    bra     stv_write_strided_long
+    nop
+
+    .org 0xC40, 0
+    .global stv_resident_vector_set
+stv_resident_vector_set:
+    tst     r5, r5
+    bf      resident_vector_value_ready
+    mov.l   resident_irq_default, r5
+resident_vector_value_ready:
+    stc     vbr, r0
+    shll2   r4
+    mov.l   r5, @(r0, r4)
+    rts
+    nop
+    .align 2
+resident_irq_default: .long stv_resident_irq_return
+
+    .org 0xC80, 0
+    .global stv_resident_handler_set
+stv_resident_handler_set:
+    tst     r5, r5
+    bf      resident_handler_value_ready
+    mov.l   resident_exception_default, r5
+resident_handler_value_ready:
+    mov.l   resident_handler_table, r0
+    shll2   r4
+    mov.l   r5, @(r0, r4)
+    rts
+    nop
+    .align 2
+resident_exception_default: .long stv_resident_exception
+resident_handler_table:      .long 0x06000900
+
+    .org 0xCC0, 0
+    .global stv_resident_copy_128
+stv_resident_copy_128:
+    mov.l   resident_copy_128_dst, r0
+    mov     #32, r3
+resident_copy_128_loop:
+    mov.l   @r4+, r2
+    mov.l   r2, @r0
+    add     #4, r0
+    dt      r3
+    bf      resident_copy_128_loop
+    rts
+    nop
+    .align 2
+resident_copy_128_dst: .long 0x06000A80
+
+    .org 0xD00, 0
+    .global stv_resident_copy_20
+stv_resident_copy_20:
+    mov.l   resident_copy_20_src, r5
+    mov     r4, r6
+    mov     #20, r3
+resident_copy_20_loop:
+    mov.b   @r5+, r1
+    mov.b   r1, @r6
+    add     #1, r6
+    dt      r3
+    bf      resident_copy_20_loop
+    rts
+    nop
+    .align 2
+resident_copy_20_src: .long 0x06000740
+
+! Install two compact close-packed veneers at 0xC00/0xC0A, then ordinary
+! 12-byte absolute veneers for the remaining resident entry points.
+    .org 0xE00, 0
+    .global stv_install_resident_veneers
+stv_install_resident_veneers:
+    mov.l   resident_c00_ptr, r1
+    mov.w   resident_c00_load, r0
+    mov.w   r0, @r1
+    add     #2, r1
+    mov.w   resident_jump_op, r0
+    mov.w   r0, @r1
+    add     #2, r1
+    mov.w   resident_nop_op, r0
+    mov.w   r0, @r1
+
+    mov.l   resident_c0a_ptr, r1
+    mov.w   resident_c0a_load, r0
+    mov.w   r0, @r1
+    add     #2, r1
+    mov.w   resident_jump_op, r0
+    mov.w   r0, @r1
+    add     #2, r1
+    mov.w   resident_nop_op, r0
+    mov.w   r0, @r1
+
+    mov.l   resident_c20_ptr, r1
+    mov.l   resident_c00_target, r0
+    mov.l   r0, @r1
+    mov.l   resident_c24_ptr, r1
+    mov.l   resident_c0a_target, r0
+    mov.l   r0, @r1
+
+    mov.l   resident_veneer_table_ptr_e, r1
+resident_veneer_loop:
+    mov.l   @r1+, r2
+    tst     r2, r2
+    bt      resident_veneer_done
+    mov.l   @r1+, r3
+    mov.l   resident_abs_op0, r0
+    mov.l   r0, @r2
+    mov.l   resident_abs_op1, r0
+    mov.l   r0, @(4, r2)
+    mov.l   r3, @(8, r2)
+    bra     resident_veneer_loop
+    nop
+resident_veneer_done:
+    rts
+    nop
+
+    .align 2
+resident_c00_ptr:    .long 0x06000C00
+resident_c0a_ptr:    .long 0x06000C0A
+resident_c20_ptr:    .long 0x06000C20
+resident_c24_ptr:    .long 0x06000C24
+resident_c00_target: .long stv_resident_mask_set
+resident_c0a_target: .long stv_resident_mask_update
+resident_abs_op0:    .long 0xD001402B
+resident_abs_op1:    .long 0x00090009
+resident_veneer_table_ptr_e: .long resident_veneer_table
+    .align 1
+resident_c00_load: .word 0xD007
+resident_c0a_load: .word 0xD006
+resident_jump_op:  .word 0x402B
+resident_nop_op:   .word 0x0009
+    .align 2
+resident_veneer_table:
+    .long 0x06000D14, stv_resident_clock_dispatch
+    .long 0x06001198, stv_resident_queue_pop
+    .long 0x0600120E, stv_resident_system_flag
+    .long 0x06001412, stv_resident_strided_dispatch
+    .long 0x06001494, stv_resident_vector_set
+    .long 0x060014A8, stv_resident_handler_set
+    .long 0x060014C0, stv_resident_copy_128
+    .long 0x060014E0, stv_resident_copy_20
+    .long 0x00000000, 0x00000000

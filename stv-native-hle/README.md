@@ -74,6 +74,28 @@ return registers. Concurrent changes to the vblank accumulator were excluded
 from the contract. The associated display/SCU/SCSP reset is intentionally a
 separate trampoline responsibility.
 
+## Generated HWRAM veneers
+
+The resident constructor emits clean jump veneers at every non-interrupt
+HWRAM entry observed during the game-to-resident edge trace:
+
+| HWRAM entry | Native entry | Contract |
+|---:|---:|---|
+| `0x06000C00` | `0x04400B00` | set SCU interrupt mask/shadow |
+| `0x06000C0A` | `0x04400B20` | masked SCU interrupt update |
+| `0x06000D14` | `0x04400B40` | vblank clock dispatch |
+| `0x06001198` | `0x04400B60` | 16-entry resident queue pop |
+| `0x0600120E` | `0x04400BA0` | system flag clear |
+| `0x06001412` | `0x04400BE0` | strided word/long read/write dispatch |
+| `0x06001494` | `0x04400C40` | VBR vector setter |
+| `0x060014A8` | `0x04400C80` | handler-table setter |
+| `0x060014C0` | `0x04400CC0` | 128-byte table copy |
+| `0x060014E0` | `0x04400D00` | 20-byte state copy |
+
+The close-packed `0xC00/0xC0A` pair uses six-byte PC-relative jump veneers;
+the other entries use the standard 12-byte absolute form. Interrupt-only
+edges at `0x06001Fxx/0x06002030` are replaced by native VBR handlers.
+
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed
 both veneers during 70 seconds of autoplay without invalid opcodes or low-ROM
