@@ -52,3 +52,21 @@ Yabause twin 临时改为与现有 PCB 相同的 CS0 16 MB 回绕和 CS1 高窗�
 192-byte binary 并实际由 SH-2 执行。70 秒自动游玩期间没有 invalid opcode、
 LOWPC/LOWEDGE 或 unknown HLE；CS1 trace 确认原 `0x033B96CB` 数据读取变为
 image offset `0x13B96CB`。临时 twin 修改在验证后已全部撤销。
+
+## Native leaf service 进度
+
+在保持前三个入口地址不变的前提下，native image 扩展到 832 bytes，并增加：
+
+| 原 BIOS | Native | 动态测试 |
+|---:|---:|---|
+| `0x0ECC` | `0x04400100` | 正常相加、负→非负饱和 |
+| `0x3E4E` | `0x04400120` | 全 busy、任一 ready nibble |
+| `0x4596` | `0x04400160` | HWRAM 与 `0x201000xx` 双写 |
+| `0x4680` | `0x044001A0` | channel 2 nibble 选择 |
+| `0x372C` | `0x044001E0` | channel 地址与符号扩展 |
+| `0x2CAC` | `0x04400220` | 返回值及 5-byte memset |
+
+连同已有 `0x2C64` memmove，已实现服务对在 `0x04400300` 输出固定的
+original→native redirect table。Yabause SH-2 interpreter 直接执行上述入口，
+11 项寄存器/内存断言全部通过；自测 harness 随后撤销。运行期 clean-HLE 还剩
+`0x0EFC` vblank update 和 `0x3842` channel-table dispatch 两个复杂入口。

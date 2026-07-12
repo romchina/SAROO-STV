@@ -129,3 +129,161 @@ patch_opcodes_0:   .long 0xD001402B
 patch_opcodes_1:   .long 0x00090009
 patch_long_target: .long stv_long_copy_reloc
 patch_mem_target:  .long stv_memmove_reloc
+
+! ---------------------------------------------------------------------------
+! Clean-HLE leaf services.  Keep each entry at a fixed address: redirect data
+! and the boot trampoline may refer to these symbols before the full runtime
+! module is linked.
+! ---------------------------------------------------------------------------
+
+    .org 0x100, 0
+    .global stv_signed_accumulate
+! BIOS 0x0ECC: r0=r4+r5. If a negative r4 crosses to non-negative, return -1.
+stv_signed_accumulate:
+    mov     r4, r0
+    cmp/pz  r4
+    bt      signed_add_normal
+    add     r5, r0
+    cmp/pz  r0
+    bf      signed_done
+    mov     #-1, r0
+signed_done:
+    rts
+    nop
+signed_add_normal:
+    rts
+    add     r5, r0
+
+    .org 0x120, 0
+    .global stv_packed_status_test
+! BIOS 0x3E4E: return 1 if any nibble of [0x06000658].word is below 8.
+stv_packed_status_test:
+    mov.l   status_word_ptr, r1
+    mov.w   @r1, r2
+    extu.w  r2, r2
+    mov     #4, r3
+status_nibble_loop:
+    mov     r2, r0
+    and     #0x0F, r0
+    mov     #8, r1
+    cmp/hs  r1, r0
+    bf      status_found
+    shlr2   r2
+    shlr2   r2
+    dt      r3
+    bf      status_nibble_loop
+    rts
+    mov     #0, r0
+status_found:
+    rts
+    mov     #1, r0
+    .align 2
+status_word_ptr: .long 0x06000658
+
+    .org 0x160, 0
+    .global stv_workspace_byte_set
+! BIOS 0x4596: mirror r5.byte to HWRAM and the ST-V system window.
+stv_workspace_byte_set:
+    mov.l   workspace_h_ptr, r1
+    add     r4, r1
+    mov.b   r5, @r1
+    mov     r4, r0
+    shll    r0
+    mov.l   workspace_s_ptr, r2
+    add     r0, r2
+    mov.b   r5, @r2
+    rts
+    nop
+    .align 2
+workspace_h_ptr: .long 0x0600065A
+workspace_s_ptr: .long 0x20100075
+
+    .org 0x1A0, 0
+    .global stv_cart_layout_nibble
+! BIOS 0x4680: select a packed layout nibble using channel 1..3, else nibble 0.
+stv_cart_layout_nibble:
+    mov.l   layout_channel_ptr, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    mov.l   layout_word_ptr, r1
+    mov.w   @r1, r2
+    extu.w  r2, r2
+    cmp/eq  #1, r0
+    bt      layout_shift_4
+    cmp/eq  #2, r0
+    bt      layout_shift_8
+    cmp/eq  #3, r0
+    bt      layout_shift_12
+    bra     layout_mask
+    nop
+layout_shift_12:
+    shlr2   r2
+    shlr2   r2
+layout_shift_8:
+    shlr2   r2
+    shlr2   r2
+layout_shift_4:
+    shlr2   r2
+    shlr2   r2
+layout_mask:
+    mov     r2, r0
+    and     #0x0F, r0
+    rts
+    nop
+    .align 2
+layout_channel_ptr: .long 0x06000650
+layout_word_ptr:    .long 0x0600064C
+
+    .org 0x1E0, 0
+    .global stv_channel_address
+! BIOS 0x372C: sign-extended low-word(channel * 0x0F00) + 0x20180100.
+stv_channel_address:
+    mov.l   channel_index_ptr, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    mov.w   channel_stride, r3
+    mulu.w  r3, r0
+    sts     macl, r0
+    exts.w  r0, r0
+    mov.l   channel_base, r2
+    add     r2, r0
+    rts
+    nop
+    .align 1
+channel_stride:    .word 0x0F00
+    .align 2
+channel_index_ptr: .long 0x06000650
+channel_base:      .long 0x20180100
+
+    .org 0x220, 0
+    .global stv_memset
+! BIOS 0x2CAC: r4=dst, r5=byte, r6=len; return the original destination.
+stv_memset:
+    mov     r4, r0
+    tst     r6, r6
+    bt      memset_done
+    mov     r4, r2
+memset_loop:
+    mov.b   r5, @r2
+    add     #1, r2
+    dt      r6
+    bf      memset_loop
+memset_done:
+    rts
+    nop
+
+! Machine-readable redirect metadata for the future clean resident dispatcher.
+! Each record is {original ST-V BIOS entry, native CS1 entry}; zero terminates.
+    .org 0x300, 0
+    .global stv_service_redirect_table
+    .global stv_service_redirect_table_end
+stv_service_redirect_table:
+    .long 0x00000ECC, stv_signed_accumulate
+    .long 0x00002C64, stv_memmove_reloc
+    .long 0x00002CAC, stv_memset
+    .long 0x0000372C, stv_channel_address
+    .long 0x00003E4E, stv_packed_status_test
+    .long 0x00004596, stv_workspace_byte_set
+    .long 0x00004680, stv_cart_layout_nibble
+stv_service_redirect_table_end:
+    .long 0x00000000, 0x00000000

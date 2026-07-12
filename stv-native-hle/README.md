@@ -20,10 +20,30 @@ Build and statically verify with:
 make test-build
 ```
 
-The remaining clean-HLE service routines and cold-boot handoff constructor are
-not part of this first native module yet.
+The two complex clean-HLE services listed below and the cold-boot handoff
+constructor are not part of this native module yet.
+
+Native clean-HLE leaf entries now implemented:
+
+| Original BIOS entry | Native CS1 entry | Service |
+|---:|---:|---|
+| `0x0ECC` | `0x04400100` | signed accumulate/saturate |
+| `0x2C64` | `0x04400034` | memmove + SAROO source relocation |
+| `0x2CAC` | `0x04400220` | memset |
+| `0x372C` | `0x044001E0` | channel address |
+| `0x3E4E` | `0x04400120` | packed status test |
+| `0x4596` | `0x04400160` | workspace byte mirror |
+| `0x4680` | `0x044001A0` | cart-layout nibble |
+
+The same pairs are emitted as a machine-readable table at `0x04400300`,
+terminated by a zero record. `0x0EFC` vblank update and `0x3842` channel-table
+dispatch remain to be implemented before the runtime service set is complete.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed
 both veneers during 70 seconds of autoplay without invalid opcodes or low-ROM
 execution. Those temporary twin changes were removed after the run.
+
+The six new leaf routines were also executed directly by Yabause's SH-2
+interpreter with injected register/HWRAM vectors. Eleven return-value and memory
+assertions passed; the temporary self-test harness was removed afterwards.

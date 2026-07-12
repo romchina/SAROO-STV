@@ -69,8 +69,12 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
 - [x] packer 在 image offset `0x1400000` 嵌入 native HLE；trampoline 在
   heartbeat 前调用 `0x04400088` installer。
 - [x] 当前组合 image SHA-1：
-  `fb4a533b3f1821305fa4f453cf31332d9f8e318b`。
-- [ ] 把其余 8 个运行期 clean-HLE 服务改写为 native SH-2。
+  `3528009cb5827bd4a6ca1eb9aef9cdc1a90c67cc`。
+- [x] native SH-2 已实现 `0x0ECC/0x2C64/0x2CAC/0x372C/0x3E4E/
+  0x4596/0x4680`，Yabause SH-2 动态测试 11 项全部通过。
+- [x] 固定 service redirect table @ `0x04400300`，构建时校验全部
+  original→native 地址对。
+- [ ] 实现运行期剩余 `0x0EFC` vblank update 与 `0x3842` channel dispatch。
 - [ ] clean 重写 HWRAM resident/向量/派发层并完成冷启动交接态。
 - [ ] Quartus/Keil 构建并在现有 SAROO 真机验证 overlay 关闭与 heartbeat。
 
