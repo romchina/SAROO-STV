@@ -61,3 +61,16 @@ GBR 重定向方案，把 `0x06038704` 当作空闲指针槽写入 `0x00003E4E`�
 - 无 `LOWEDGE` / `LOWPC`；
 - 无新的 unimplemented HLE entry；
 - vblank 与标题画面持续运行。
+
+## 自动游玩进入游戏
+
+原 `STV_AUTOPLAY` 要到 emulator frame 3000 才开始周期投币；debug interpreter
+下 210 秒也只到 frame 1800，所以标题画面没有推进。`--stvboot` 本身已从 attract
+开始，现将投币/开始窗口提前到 frame 300（from-scratch 路径也能容忍尚未读取时
+的重复 active-low 脉冲）。
+
+调整后在 Saturn BIOS + clean HLE 下运行到 frame 1200，已经进入实际游戏场景：
+
+![clean HLE game frame 1200](../../img/stv-clean-hle-game-frame1200.png)
+
+该次运行同样没有 `STV_INVALID`、`LOWEDGE`、`LOWPC` 或新的 unimplemented HLE。
