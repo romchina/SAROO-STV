@@ -118,6 +118,17 @@ call_install:
     jsr     @r0
     nop
 
+    ! Generate the clean HWRAM vector/workspace resident, then point the SH-2
+    ! at it.  This is functional state construction, not a copied BIOS blob.
+call_resident_init:
+    mov.l   hle_resident_init_ptr, r0
+    jsr     @r0
+    nop
+    mov.l   vbr_base_ptr, r0
+    ldc     r0, vbr
+    mov.l   gbr_base_ptr, r0
+    ldc     r0, gbr
+
     ! Verify the first copied instruction against fpr17969.13 offset 0x1000.
     ! A mismatch gets a distinct heartbeat and red screen; success remains
     ! the established magenta diagnostic.
@@ -193,6 +204,9 @@ game_long_count_ptr:.long 0x0003C000
 game_first_word_ptr:.long 0x4F22B0C3
 hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
+hle_resident_init_ptr:.long 0x04400800
+vbr_base_ptr:       .long 0x06000000
+gbr_base_ptr:       .long 0xFFFFFE00
 vdp2_tvmd_ptr:      .long 0x25F80000
 vdp2_bgon_ptr:      .long 0x25F80020
 vdp2_bktau_ptr:     .long 0x25F800AC

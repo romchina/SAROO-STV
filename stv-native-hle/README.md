@@ -20,8 +20,8 @@ Build and statically verify with:
 make test-build
 ```
 
-The two complex clean-HLE services listed below and the cold-boot handoff
-constructor are not part of this native module yet.
+The remaining complex system-transition services (`0x426C` and the resource/
+sound initialization closure) are not part of this native module yet.
 
 Native clean-HLE leaf entries now implemented:
 
@@ -37,11 +37,25 @@ Native clean-HLE leaf entries now implemented:
 | `0x4680` | `0x044001A0` | cart-layout nibble |
 | `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
 
-The same pairs are emitted as a machine-readable table at `0x04400300`,
+The same pairs are emitted as a machine-readable table at `0x04400700`,
 terminated by a zero record. Selectors `0/0x10/1/0x20` of `0x3842` have been
 dynamically executed with simple, signed-saturation and range-bound vectors.
 The vblank steady-state and signed-overflow/strided-counter paths are also
 dynamically covered.
+
+## Clean resident foundation
+
+`stv_resident_init` at `0x04400800` constructs the first cold-boot resident
+state without copying ST-V BIOS bytes. It clears `0x06000000..0x0600EFFF`,
+generates all 256 VBR entries, installs a visible exception trap, a default
+IRQ return, and a register-preserving VBLANK-IN wrapper. It also connects the
+verified Baku Baku vblank callback (`0x06035278`) to the native clock service
+through `[0x06000610]`.
+
+The handler entry points begin at `0x04400900`. The trampoline calls the
+initializer after copying the game and installing relocation veneers, then
+loads `VBR=0x06000000` and `GBR=0xFFFFFE00`. Interrupts remain masked during
+this diagnostic stage.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed

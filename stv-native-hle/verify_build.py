@@ -29,6 +29,8 @@ def main() -> int:
         "stv_vblank_clock_update": 0x04400260,
         "stv_channel_table_dispatch": 0x04400400,
         "stv_service_redirect_table": 0x04400700,
+        "stv_resident_init": 0x04400800,
+        "stv_resident_exception": 0x04400900,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -52,7 +54,8 @@ def main() -> int:
     for value in (0x03000000, 0x03400000, 0x01000000,
                   0x0604AFD4, 0x06053C98, 0xD001402B, 0x00090009,
                   required["stv_long_copy_reloc"],
-                  required["stv_memmove_reloc"]):
+                  required["stv_memmove_reloc"], 0x06000100,
+                  0x06000610, 0x06000A00, 0x06035278):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 

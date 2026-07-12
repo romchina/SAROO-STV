@@ -25,11 +25,13 @@ image in HWRAM and only afterwards calls the native-HLE installer at
    exactly at the top of HWRAM.
 5. Installs the two relocation veneers and verifies the first copied word
    is `0x4F22B0C3` (FPR offset `0x1000`).
-6. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
+6. Calls the clean resident constructor at `0x04400800`, then loads
+   `VBR=0x06000000` and `GBR=0xFFFFFE00`.
+7. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
    Mednafen save-state dump even without visible VDP2 output).
-7. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
+8. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
    turn the display on with a bright magenta back-screen.
-8. Halts in a `nop ; bra halt ; nop` loop.
+9. Halts in a `nop ; bra halt ; nop` loop.
 
 If the copy verification fails, the heartbeat is `0xDEAD1000` and the
 back-screen is red instead of magenta.
@@ -125,7 +127,7 @@ installing a real Saturn BIOS or running on real hardware.
 0x0EC  _start           (slave SH-2 SP — unused)
 0x0F0  reserved         (16 bytes of 0)
 0x100  _start           (entry point — SH-2 code)
-0x1CC  end (460 bytes total; still well inside the 4 KB overlay)
+0x1E4  end (484 bytes total; still well inside the 4 KB overlay)
 ```
 
 ## Known limitations (explicit Phase-1 cut)

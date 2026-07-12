@@ -585,3 +585,149 @@ stv_service_redirect_table:
     .long 0x00003842, stv_channel_table_dispatch
 stv_service_redirect_table_end:
     .long 0x00000000, 0x00000000
+
+! ---------------------------------------------------------------------------
+! Clean cold-boot resident foundation.  This replaces the BIOS-copied HWRAM
+! resident with generated state: zeroed workspace, native vector handlers,
+! and the minimum Baku Baku callback seam.  No Sega BIOS bytes are embedded.
+! ---------------------------------------------------------------------------
+    .org 0x800, 0
+    .global stv_resident_init
+stv_resident_init:
+    ! Clear 0x06000000..0x0600EFFF, leaving the SEGA page/game image intact.
+    mov     #0, r0
+    mov.l   resident_base, r1
+    mov.l   resident_clear_longs, r2
+resident_clear_loop:
+    mov.l   r0, @r1
+    add     #4, r1
+    dt      r2
+    bf      resident_clear_loop
+
+    ! Default every vector to a harmless RTE, then make the first twelve
+    ! reset/exception vectors trap visibly instead of returning corrupt state.
+    mov.l   resident_base, r1
+    mov.l   resident_irq_return_ptr, r0
+    mov.l   resident_vector_count, r2
+resident_vector_loop:
+    mov.l   r0, @r1
+    add     #4, r1
+    dt      r2
+    bf      resident_vector_loop
+
+    mov.l   resident_base, r1
+    mov.l   resident_exception_ptr, r0
+    mov     #12, r2
+resident_exception_loop:
+    mov.l   r0, @r1
+    add     #4, r1
+    dt      r2
+    bf      resident_exception_loop
+
+    ! SCU VBLANK-IN is vector 0x40.  The wrapper preserves caller registers,
+    ! invokes the game callback, then RTEs through the SH-2 interrupt frame.
+    mov.l   resident_vblank_vector, r1
+    mov.l   resident_vblank_ptr, r0
+    mov.l   r0, @r1
+
+    ! Native service/callback seam used by the verified game vblank handler.
+    mov.l   resident_service_610, r1
+    mov.l   resident_clock_ptr, r0
+    mov.l   r0, @r1
+    mov.l   resident_callback_640, r1
+    mov.l   resident_noop_ptr, r0
+    mov.l   r0, @r1
+    mov.l   resident_callback_644, r1
+    mov.l   r0, @r1
+    mov.l   resident_callback_648, r1
+    mov.l   r0, @r1
+
+    mov.l   resident_handler_a00, r1
+    mov.l   resident_game_vblank, r0
+    mov.l   r0, @r1
+    mov.l   resident_handler_a04, r1
+    mov.l   resident_game_aux, r0
+    mov.l   r0, @r1
+    mov.l   resident_handler_a08, r1
+    mov.l   resident_noop_ptr, r0
+    mov.l   r0, @r1
+    mov.l   r0, @(4, r1)
+    mov.l   r0, @(8, r1)
+    rts
+    nop
+
+    .align 2
+resident_base:            .long 0x06000000
+resident_clear_longs:     .long 0x00003C00
+resident_vector_count:    .long 0x00000100
+resident_vblank_vector:   .long 0x06000100
+resident_service_610:     .long 0x06000610
+resident_callback_640:    .long 0x06000640
+resident_callback_644:    .long 0x06000644
+resident_callback_648:    .long 0x06000648
+resident_handler_a00:     .long 0x06000A00
+resident_handler_a04:     .long 0x06000A04
+resident_handler_a08:     .long 0x06000A08
+resident_exception_ptr:   .long stv_resident_exception
+resident_irq_return_ptr:  .long stv_resident_irq_return
+resident_vblank_ptr:      .long stv_resident_vblank
+resident_clock_ptr:       .long stv_vblank_clock_update
+resident_noop_ptr:        .long stv_resident_noop
+resident_game_vblank:     .long 0x06035278
+resident_game_aux:        .long 0x06035C48
+
+    .org 0x900, 0
+    .global stv_resident_exception
+stv_resident_exception:
+    mov.l   resident_exception_diag, r0
+    mov.l   resident_diag_ptr, r1
+    mov.l   r0, @r1
+resident_exception_halt:
+    bra     resident_exception_halt
+    nop
+
+    .align 2
+    .global stv_resident_irq_return
+stv_resident_irq_return:
+    rte
+    nop
+
+    .global stv_resident_noop
+stv_resident_noop:
+    rts
+    nop
+
+    .global stv_resident_vblank
+stv_resident_vblank:
+    sts.l   pr, @-r15
+    mov.l   r0, @-r15
+    mov.l   r1, @-r15
+    mov.l   r2, @-r15
+    mov.l   r3, @-r15
+    mov.l   r4, @-r15
+    mov.l   r5, @-r15
+    mov.l   r6, @-r15
+    mov.l   r7, @-r15
+    mov.l   resident_handler_a00_irq, r0
+    mov.l   @r0, r0
+    tst     r0, r0
+    bt      resident_vblank_restore
+    jsr     @r0
+    nop
+resident_vblank_restore:
+    mov.l   @r15+, r7
+    mov.l   @r15+, r6
+    mov.l   @r15+, r5
+    mov.l   @r15+, r4
+    mov.l   @r15+, r3
+    mov.l   @r15+, r2
+    mov.l   @r15+, r1
+    mov.l   @r15+, r0
+    lds.l   @r15+, pr
+    rte
+    nop
+
+    .align 2
+resident_diag_ptr:          .long 0x06000BFC
+resident_exception_diag:    .long 0xDEADE001
+resident_handler_a00_irq:   .long 0x06000A00

@@ -32,13 +32,15 @@ def main() -> int:
     assert sym["_start"] == 0x02000100
     assert sym["alias_entry"] < 0x02001000
     assert (sym["fill_sega_page"] < sym["call_long_copy"]
-            < sym["call_install"] < sym["verify_game_copy"]
+            < sym["call_install"] < sym["call_resident_init"]
+            < sym["verify_game_copy"]
             < sym["show_status"])
 
     required_longs = (
         0x0600F000, 0x53454741, 0x00000400,
         0x06010000, 0x02201000, 0x0003C000,
         0x4F22B0C3, 0x04400000, 0x04400088,
+        0x04400800, 0x06000000, 0xFFFFFE00,
         0x5AA5A55A, 0xDEAD1000,
     )
     for value in required_longs:
