@@ -12,7 +12,7 @@
 
 | 地址 | 描述性名称 | 语义 / HLE 契约 |
 |---:|---|---|
-| `0x0ECC` | `callback_dispatch` | 运行 HWRAM 注册回调；被 vblank/通道处理复用。 |
+| `0x0ECC` | `signed_accumulate_saturate` | `r0=r4+r5`；若负的 `r4` 加法后跨到非负区间，则返回 `-1`。vblank 时间更新用它处理回绕后的偏移。 |
 | `0x0EFC` | `vblank_clock_update` | 更新 `[0x06000758]` 的 NTSC 时间累加器，溢出时调用两个 HWRAM 回调。 |
 | `0x1120` | `sound_driver_unpack_init` | 置声音初始化 busy 位，把压缩的 68K 驱动解到 sound RAM，建立声音工作区指针，最后清 busy 位。 |
 | `0x1760` | `sega_lz_decompress` | 位流 LZ 解压；`r4=src, r5=dst`，`r0=输出字节数`。包含 literal、短回溯和长回溯三种 token。 |
@@ -67,4 +67,3 @@ python3 tools/stv/sh2_closure.py \
   stvstate/tramp/resident.bin \
   stvstate/tramp/game.bin
 ```
-
