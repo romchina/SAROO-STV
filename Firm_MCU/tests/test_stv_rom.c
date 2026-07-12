@@ -22,6 +22,10 @@ extern uint16_t g_mock_fpga_ctrl;
 extern uint16_t g_mock_fpga_rom_base;
 extern uint16_t g_mock_fpga_sdram_bank;
 extern uint16_t g_mock_fpga_boot_overlay;
+extern uint16_t g_mock_fpga_ioga_ab;
+extern uint16_t g_mock_fpga_ioga_ce;
+extern uint16_t g_mock_fpga_ioga_fd;
+extern uint16_t g_mock_fpga_ioga_gm;
 extern size_t   g_mock_sdram_fail_at;
 extern unsigned g_mock_sdram_write_count;
 
@@ -32,6 +36,10 @@ static void reset_mocks(void)
     g_mock_fpga_rom_base = 0;
     g_mock_fpga_sdram_bank = 0;
     g_mock_fpga_boot_overlay = 0;
+    g_mock_fpga_ioga_ab = 0;
+    g_mock_fpga_ioga_ce = 0;
+    g_mock_fpga_ioga_fd = 0;
+    g_mock_fpga_ioga_gm = 0;
     g_mock_sdram_fail_at = SIZE_MAX;
     g_mock_sdram_write_count = 0;
 }
@@ -100,6 +108,24 @@ static void test_small_rom_load(void)
     /* FPGA regs: base=4, MCU-owned ST-V ROM mode bit set. */
     ASSERT_EQ_U16("small fpga rom_base", g_mock_fpga_rom_base, 4);
     ASSERT_EQ_U16("small fpga ctrl",     g_mock_fpga_ctrl, ST_CTRL_STV_ROM);
+    ASSERT_EQ_U16("small idle IOGA A/B", g_mock_fpga_ioga_ab, 0xFFFF);
+    ASSERT_EQ_U16("small idle IOGA C/E", g_mock_fpga_ioga_ce, 0xFFFF);
+    ASSERT_EQ_U16("small idle IOGA F/D", g_mock_fpga_ioga_fd, 0xFFFC);
+    ASSERT_EQ_U16("small idle IOGA G/mode", g_mock_fpga_ioga_gm, 0xFF00);
+}
+
+static void test_ioga_port_packing(void)
+{
+    printf("\n== test_ioga_port_packing ==\n");
+    reset_mocks();
+    const stv_ioga_ports_t ports = {
+        0x7E, 0xBD, 0xEE, 0x0C, 0xDF, 0xEF, 0xF7, 0x01
+    };
+    stv_ioga_set(&ports);
+    ASSERT_EQ_U16("IOGA A/B", g_mock_fpga_ioga_ab, 0x7EBD);
+    ASSERT_EQ_U16("IOGA C/E", g_mock_fpga_ioga_ce, 0xEEDF);
+    ASSERT_EQ_U16("IOGA F/D", g_mock_fpga_ioga_fd, 0xEF0C);
+    ASSERT_EQ_U16("IOGA G/mode", g_mock_fpga_ioga_gm, 0xF701);
 }
 
 static void test_multi_chunk_rom_load(void)
@@ -260,6 +286,7 @@ int main(void)
     test_sdram_failure_stops_load();
     test_load_crosses_16mb_aperture_bank();
     test_embedded_boot_overlay_is_detected();
+    test_ioga_port_packing();
 
     if(fails) {
         printf("\n%d FAILURES\n", fails);

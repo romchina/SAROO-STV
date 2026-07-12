@@ -781,6 +781,9 @@ stv_resident_vblank:
     mov.l   r5, @-r15
     mov.l   r6, @-r15
     mov.l   r7, @-r15
+    mov.l   resident_input_poll_ptr, r0
+    jsr     @r0
+    nop
     mov.l   resident_handler_a00_irq, r0
     mov.l   @r0, r0
     tst     r0, r0
@@ -805,6 +808,7 @@ resident_diag_ptr:          .long 0x06000BFC
 resident_crash_ptr:         .long 0x06000B80
 resident_exception_diag:    .long 0xDEADE001
 resident_handler_a00_irq:   .long 0x06000A00
+resident_input_poll_ptr:    .long stv_resident_input_poll
 
 ! Non-returning clean equivalent of the BIOS bootstrap transition at 0x4114.
 ! The trampoline has already copied the FPR image, so record the observable
@@ -1261,3 +1265,76 @@ stv_resident_vector_get:
     mov.l   @(r0, r4), r0
     rts
     nop
+
+    ! Read the MCU-owned active-low IOGA shadow through SAROO's reachable CS2
+    ! control window. Saturn cannot route ST-V's original 0x00400000 page to
+    ! the cartridge, so publish the same active-high HWRAM input words that
+    ! the original 0x06002098 poller produced.
+    .org 0x1140, 0
+    .global stv_resident_input_poll
+stv_resident_input_poll:
+    mov.l   ioga_shadow_ab, r0
+    mov.w   @r0, r1
+    swap.b  r1, r4
+    extu.b  r4, r4
+    not     r4, r4
+    extu.b  r4, r4
+    extu.b  r1, r5
+    not     r5, r5
+    extu.b  r5, r5
+    mov.l   ioga_port_a_dst, r0
+    mov.l   r4, @r0
+    mov.l   ioga_port_b_dst, r0
+    mov.l   r5, @r0
+
+    mov.l   ioga_shadow_ce, r0
+    mov.w   @r0, r1
+    swap.b  r1, r6
+    extu.b  r6, r6
+    not     r6, r6
+    extu.b  r6, r6
+    extu.b  r1, r7
+    not     r7, r7
+    extu.b  r7, r7
+    mov.l   ioga_port_c_dst, r0
+    mov.l   r6, @r0
+    mov.l   ioga_port_e_dst, r0
+    mov.l   r7, @r0
+
+    mov.l   ioga_shadow_fd, r0
+    mov.w   @r0, r1
+    swap.b  r1, r2
+    extu.b  r2, r2
+    not     r2, r2
+    extu.b  r2, r2
+    mov.l   ioga_port_f_dst, r0
+    mov.l   r2, @r0
+
+    ! Preserve the original resident's compact derived system byte:
+    ! ~(((A >> 1) & 4) | (C & 3) | (B & 8)).
+    mov     r4, r0
+    shlr    r0
+    and     #4, r0
+    mov     r0, r3
+    mov     r6, r0
+    and     #3, r0
+    or      r0, r3
+    mov     r5, r0
+    and     #8, r0
+    or      r0, r3
+    not     r3, r3
+    mov.l   ioga_system_dst, r0
+    mov.b   r3, @r0
+    rts
+    nop
+
+    .align 2
+ioga_shadow_ab:  .long 0x25807020
+ioga_shadow_ce:  .long 0x25807022
+ioga_shadow_fd:  .long 0x25807024
+ioga_port_a_dst: .long 0x06002864
+ioga_port_b_dst: .long 0x06002868
+ioga_port_c_dst: .long 0x0600286C
+ioga_port_e_dst: .long 0x06002870
+ioga_port_f_dst: .long 0x06002874
+ioga_system_dst: .long 0x06000730

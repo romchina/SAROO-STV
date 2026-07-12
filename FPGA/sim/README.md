@@ -48,6 +48,9 @@ wsl -- bash -c 'cd /mnt/c/Users/mixio/Documents/GitHub/SAROO-STV/FPGA/sim && bas
 - **SAROO port iteration 1**: verify STM32 SDRAM aperture bank reset and
   high-address composition. Register `0x32` selects one of four 16 MB banks,
   allowing the MCU loader to populate a full 32 MB CS0 image.
+- **SAROO IOGA shadow**: verify idle/injected packed ports at Saturn CS2
+  `0x25807020-0x25807026`; the native resident mirrors them into HWRAM because
+  the cartridge cannot decode ST-V's original `0x00400000` page.
 
 ## Known gaps vs. real hardware
 

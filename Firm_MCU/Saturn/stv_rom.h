@@ -26,6 +26,13 @@ typedef struct {
     uint16_t rom_base_mb;  /* the MB-unit value written to ss_rom_base    */
 } stv_rom_info_t;
 
+/* Active-low 315-5649 port image.  The FPGA exposes this through the SAROO
+ * CS2 control window because a Saturn cartridge cannot decode ST-V's original
+ * low-bus address 0x00400000. */
+typedef struct {
+    uint8_t a, b, c, d, e, f, g, mode;
+} stv_ioga_ports_t;
+
 /* Load a ROM image from `path` into SDRAM and switch FPGA to CS0 ROM mode.
  * Returns 0 on success, negative on error:
  *   -1: file open / read failure
@@ -36,6 +43,9 @@ int stv_rom_load(const char *path, stv_rom_info_t *out);
 /* Restore the FPGA's default CS0 mode (CD-Block / RAM Cart coexistence).
  * Leaves SDRAM contents intact — only clears ROM mode + rom_base. */
 void stv_rom_unload(void);
+
+void stv_ioga_set(const stv_ioga_ports_t *ports);
+void stv_ioga_idle(void);
 
 /* For tests and diagnostics. */
 uint32_t stv_rom_sdram_reserve_offset(void);

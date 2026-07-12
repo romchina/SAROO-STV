@@ -236,6 +236,10 @@ module SSMaster(
 			ss_rom_base <= 16'h0000;
 			st_sdram_bank <= 2'b00;
 			st_boot_overlay <= 1'b0;
+			st_ioga_ab <= 16'hffff;
+			st_ioga_ce <= 16'hffff;
+			st_ioga_fd <= 16'hfffc;
+			st_ioga_gm <= 16'hff00;
 		end else if(st_wr_start==1) begin
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h04) st_reg_ctrl <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h16) st_reg_spi <= ST_AD[3:1];
@@ -249,6 +253,11 @@ module SSMaster(
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h32) st_sdram_bank <= ST_AD[1:0];
 			// Boot overlay enable. Saturn clears it through register 0x1c.
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h34) st_boot_overlay <= ST_AD[0];
+			// Baku IOGA shadow, packed as two active-low ports per word.
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h36) st_ioga_ab <= ST_AD;
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h38) st_ioga_ce <= ST_AD;
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h3a) st_ioga_fd <= ST_AD;
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h3c) st_ioga_gm <= ST_AD;
 		end else if(ss_wr_start==1 && ss_reg_cs==1 &&
 				SS_ADDR[5:2]==4'b01_11) begin
 			st_boot_overlay <= 1'b0;
@@ -260,6 +269,10 @@ module SSMaster(
 	reg[15:0] ss_rom_base;
 	reg[1:0] st_sdram_bank;
 	reg st_boot_overlay;
+	reg[15:0] st_ioga_ab;
+	reg[15:0] st_ioga_ce;
+	reg[15:0] st_ioga_fd;
+	reg[15:0] st_ioga_gm;
 
 
 
@@ -418,6 +431,10 @@ module SSMaster(
 						(fsmc_addr[7:0]==8'h30)? ss_rom_base :
 						(fsmc_addr[7:0]==8'h32)? {14'b0, st_sdram_bank} :
 						(fsmc_addr[7:0]==8'h34)? {15'b0, st_boot_overlay} :
+						(fsmc_addr[7:0]==8'h36)? st_ioga_ab :
+						(fsmc_addr[7:0]==8'h38)? st_ioga_ce :
+						(fsmc_addr[7:0]==8'h3a)? st_ioga_fd :
+						(fsmc_addr[7:0]==8'h3c)? st_ioga_gm :
 
 						16'hffff;
 	end
@@ -533,6 +550,10 @@ module SSMaster(
 			(SS_ADDR[5:2]==4'b01_00 )? ss_reg_cmd :
 			(SS_ADDR[5:2]==4'b01_01 )? ss_reg_data :
 			(SS_ADDR[5:2]==4'b01_10 )? ss_fifo_data_out :
+			(SS_ADDR[5:1]==5'b10_000)? st_ioga_ab :
+			(SS_ADDR[5:1]==5'b10_001)? st_ioga_ce :
+			(SS_ADDR[5:1]==5'b10_010)? st_ioga_fd :
+			(SS_ADDR[5:1]==5'b10_011)? st_ioga_gm :
 			16'h0000;
 	end
 

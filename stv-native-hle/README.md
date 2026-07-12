@@ -81,6 +81,13 @@ a binary HWRAM dump with:
 python tools/stv/decode_crash.py hwram.bin
 ```
 
+`stv_resident_input_poll` at `0x04401140` runs before the game VBlank callback.
+It reads packed active-low A/B, C/E and F/D ports from SAROO's CS2 registers at
+`0x25807020/22/24`, then publishes the original resident's active-high input
+longs at `0x06002864-0x06002874` and derived system byte at `0x06000730`.
+This indirection is required because the Saturn cartridge bus cannot select the
+ST-V IOGA's original low-bus page at `0x00400000`.
+
 `stv_bootstrap_handoff` reproduces the measured non-returning `0x4114`
 transition: it builds the 32-byte frame at `0x060FFFDC`, restores the observed
 register state (`GBR=0x060D28C8`, `R4=0x120`, `R5=0x20180108`,

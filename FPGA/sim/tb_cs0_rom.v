@@ -130,6 +130,22 @@ module tb_cs0_rom;
         end
     endtask
 
+    task ss_read_cs2_reg16;
+        input  [23:0] addr;
+        output [15:0] data;
+        begin
+            @(posedge CLK_50M);
+            SS_ADDR = addr;
+            SS_CS2  = 1'b0;
+            SS_RD   = 1'b0;
+            repeat(8) @(posedge CLK_50M);
+            data = SS_DATA;
+            SS_CS2 = 1'b1;
+            SS_RD  = 1'b1;
+            repeat(6) @(posedge CLK_50M);
+        end
+    endtask
+
     // Saturn-side read cycle. Uses blocking assignments so stimulus
     // takes effect immediately and the WAIT poll sees fresh state.
     task ss_read16;
@@ -202,6 +218,26 @@ module tb_cs0_rom;
         // plus CKE-assert+precharge+refresh+LMR latency. Be generous.
         #600000;
         $display("[TB] waited for SDRAM POR, t=%0t", $time);
+
+        // ST-V's original 0x00400000 IOGA page is not routed to a Saturn
+        // cartridge.  The MCU supplies packed active-low ports through the
+        // reachable SAROO CS2 control block instead.
+        ss_read_cs2_reg16(24'h007020, got);
+        check_eq16("IOGA idle A/B", got, 16'hFFFF);
+        ss_read_cs2_reg16(24'h007022, got);
+        check_eq16("IOGA idle C/E", got, 16'hFFFF);
+        ss_read_cs2_reg16(24'h007024, got);
+        check_eq16("IOGA idle F/D", got, 16'hFFFC);
+        ss_read_cs2_reg16(24'h007026, got);
+        check_eq16("IOGA idle G/mode", got, 16'hFF00);
+        force dut.st_ioga_ab = 16'h7EBD;
+        force dut.st_ioga_ce = 16'hEEDF;
+        ss_read_cs2_reg16(24'h007020, got);
+        check_eq16("IOGA injected A/B", got, 16'h7EBD);
+        ss_read_cs2_reg16(24'h007022, got);
+        check_eq16("IOGA injected C/E", got, 16'hEEDF);
+        release dut.st_ioga_ab;
+        release dut.st_ioga_ce;
 
         // STM32 sees SDRAM through a 16 MB aperture. Register 0x32 supplies
         // the two high address bits so a streaming loader can reach 64 MB.

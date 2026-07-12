@@ -31,6 +31,10 @@
 #define FPGA_REG_ROM_BASE      0x30   /* ss_rom_base  — 1 MB units                */
 #define FPGA_REG_SDRAM_BANK    0x32   /* STM32 SDRAM aperture, 16 MB units        */
 #define FPGA_REG_BOOT_OVERLAY   0x34   /* CS0 low 4 KB -> image offset 31 MB      */
+#define FPGA_REG_IOGA_AB        0x36   /* packed active-low ports A/B             */
+#define FPGA_REG_IOGA_CE        0x38   /* packed active-low ports C/E             */
+#define FPGA_REG_IOGA_FD        0x3A   /* packed active-low ports F/D             */
+#define FPGA_REG_IOGA_GM        0x3C   /* packed active-low port G / mode          */
 
 #define ST_CTRL_STV_CS1        (1u << 10)   /* CS1 maps image bytes 16 MB+ */
 #define ST_CTRL_STV_ROM        (1u << 11)   /* force CS0/CS1 read-only ROM */
@@ -50,6 +54,10 @@ uint16_t g_mock_fpga_ctrl;
 uint16_t g_mock_fpga_rom_base;
 uint16_t g_mock_fpga_sdram_bank;
 uint16_t g_mock_fpga_boot_overlay;
+uint16_t g_mock_fpga_ioga_ab;
+uint16_t g_mock_fpga_ioga_ce;
+uint16_t g_mock_fpga_ioga_fd;
+uint16_t g_mock_fpga_ioga_gm;
 size_t   g_mock_sdram_fail_at = SIZE_MAX;
 unsigned g_mock_sdram_write_count;
 
@@ -96,6 +104,10 @@ static void fpga_reg_write(uint32_t reg_off, uint16_t val)
     case FPGA_REG_ROM_BASE: g_mock_fpga_rom_base = val; break;
     case FPGA_REG_SDRAM_BANK: g_mock_fpga_sdram_bank = val; break;
     case FPGA_REG_BOOT_OVERLAY: g_mock_fpga_boot_overlay = val; break;
+    case FPGA_REG_IOGA_AB: g_mock_fpga_ioga_ab = val; break;
+    case FPGA_REG_IOGA_CE: g_mock_fpga_ioga_ce = val; break;
+    case FPGA_REG_IOGA_FD: g_mock_fpga_ioga_fd = val; break;
+    case FPGA_REG_IOGA_GM: g_mock_fpga_ioga_gm = val; break;
     default: /* ignore */ break;
     }
 }
@@ -107,6 +119,10 @@ static uint16_t fpga_reg_read(uint32_t reg_off)
     case FPGA_REG_ROM_BASE: return g_mock_fpga_rom_base;
     case FPGA_REG_SDRAM_BANK: return g_mock_fpga_sdram_bank;
     case FPGA_REG_BOOT_OVERLAY: return g_mock_fpga_boot_overlay;
+    case FPGA_REG_IOGA_AB: return g_mock_fpga_ioga_ab;
+    case FPGA_REG_IOGA_CE: return g_mock_fpga_ioga_ce;
+    case FPGA_REG_IOGA_FD: return g_mock_fpga_ioga_fd;
+    case FPGA_REG_IOGA_GM: return g_mock_fpga_ioga_gm;
     default: return 0;
     }
 }
@@ -181,6 +197,27 @@ static uint16_t fpga_reg_read(uint32_t reg_off)
 
 /* ---------------- Public API --------------------------------------- */
 
+void stv_ioga_set(const stv_ioga_ports_t *ports)
+{
+    if(!ports) return;
+    fpga_reg_write(FPGA_REG_IOGA_AB,
+                   (uint16_t)(((uint16_t)ports->a << 8) | ports->b));
+    fpga_reg_write(FPGA_REG_IOGA_CE,
+                   (uint16_t)(((uint16_t)ports->c << 8) | ports->e));
+    fpga_reg_write(FPGA_REG_IOGA_FD,
+                   (uint16_t)(((uint16_t)ports->f << 8) | ports->d));
+    fpga_reg_write(FPGA_REG_IOGA_GM,
+                   (uint16_t)(((uint16_t)ports->g << 8) | ports->mode));
+}
+
+void stv_ioga_idle(void)
+{
+    const stv_ioga_ports_t idle = {
+        0xFF, 0xFF, 0xFF, 0xFC, 0xFF, 0xFF, 0xFF, 0x00
+    };
+    stv_ioga_set(&idle);
+}
+
 /* Keep the staging buffer small enough for the STM32 image. Full CS0 images
  * are streamed through this buffer and never need to fit in MCU RAM. */
 #define STAGE_BUF_BYTES   (64u * 1024u)
@@ -237,6 +274,7 @@ int stv_rom_load(const char *path, stv_rom_info_t *out)
         ctrl &= (uint16_t)~ST_CTRL_STV_CS1;
     fpga_reg_write(FPGA_REG_ROM_BASE, base_mb);
     fpga_reg_write(FPGA_REG_BOOT_OVERLAY, (uint16_t)has_boot_overlay);
+    stv_ioga_idle();
     fpga_reg_write(FPGA_REG_CTRL, ctrl);
 
     out->sdram_base  = STV_ROM_SDRAM_OFFSET;
@@ -251,6 +289,7 @@ void stv_rom_unload(void)
     fpga_reg_write(FPGA_REG_ROM_BASE, 0);
     fpga_reg_write(FPGA_REG_SDRAM_BANK, 0);
     fpga_reg_write(FPGA_REG_BOOT_OVERLAY, 0);
+    stv_ioga_idle();
     /* Return to normal SAROO control without disturbing FIFO/IRQ bits. */
     ctrl &= (uint16_t)~(ST_CTRL_STV_ROM | ST_CTRL_STV_CS1);
     fpga_reg_write(FPGA_REG_CTRL, ctrl);

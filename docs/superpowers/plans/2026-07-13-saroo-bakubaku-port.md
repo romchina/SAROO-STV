@@ -68,9 +68,9 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   模拟 SAROO CS0/CS1 分窗的 twin 中原生执行 70 秒。
 - [x] packer 在 image offset `0x1400000` 嵌入 native HLE；trampoline 在
   heartbeat 前调用 `0x04400088` installer。
-- [x] 当前诊断 image SHA-1：
-  `0c76fba80cf63f7b5677132de0cdbd835d42f766`；cold-run image SHA-1：
-  `f7ddc3e56b19ef5e21fa648d57270a322e6a8ebf`。
+- [x] 加入完整 crash capture 与 CS2 IOGA shadow 后，当前诊断 image SHA-1：
+  `c406cd14beefb10eb92bb7de467fcc2dc4748f18`；cold-run image SHA-1：
+  `e15563560fb10490834ba46d620fef0c2b03d976`。
 - [x] native SH-2 已实现 `0x0ECC/0x2C64/0x2CAC/0x372C/0x3E4E/
   0x4596/0x4680`，Yabause SH-2 动态测试 11 项全部通过。
 - [x] 固定 service redirect table @ `0x04400700`，构建时校验全部
@@ -87,6 +87,10 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   诊断/运行 trampoline 可从 Windows 经 WSL 或 Linux 单命令全量重建检查。
 - [x] native exception trap 保存完整 SH-2 上下文到 `0x06000B80`，并提供
   `tools/stv/decode_crash.py` 离线解析 PC/PR/SR、R0-R14 和控制寄存器。
+- [x] 纠正 IOGA 硬件路由：原 `0x00400000` 无卡槽片选；FPGA/MCU 改用
+  CS2 packed port shadow，native VBlank 生成 Baku 的 HWRAM 输入状态。
+- [ ] native SMPC INTBACK 手柄轮询与 JAMMA 映射（必须带超时并验证 VBlank
+  不阻塞；MCU无法直接读取当前 PCB 的 Saturn 手柄总线）。
 - [ ] Quartus/Keil 构建并在现有 SAROO 真机验证 overlay 关闭与 heartbeat。
 
 ## 第一真机验收步骤

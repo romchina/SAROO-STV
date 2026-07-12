@@ -40,8 +40,8 @@ Saturn 上电 → 跑自己的 mask BIOS → IPL 引导 SAROO 卡
 | **A. ROM 映射** | `cs0.c` 的 `CART_STV` 把 bakubaku 映进 CS0 | FPGA 把 ST-V 卡带 ROM 映进 A-Bus CS0/CS1/CS2（49MB） | Phase 1-2 |
 | **B. Boot trampoline** | （孪生用 BIOS/快照绕过） | Saturn 卡头 + 复刻 ST-V BIOS 的游戏初始化代码 | Phase 1-2（新） |
 | **C. ST-V BIOS 例程 HLE** ⚠️ | 把 ST-V BIOS ROM 整个塞 0x00000000 当脚手架 | **HLE 游戏调用的 BIOS 例程**（Saturn mask BIOS 占着地址改不了） | Phase 2 / M-HLE-3 |
-| **D. 315-5649 IOGA** | `memory.c` shim `IOGA[7]=0xFC` 等 | FPGA 把 IOGA I/O 芯片做出来 | Phase 3 |
-| **E. SMPC / 输入翻译** | shim `PDR=0x7F`、`SYSRES=复位` | STM32 读 Saturn 手柄→翻译成 JAMMA→喂 FPGA IOGA | Phase 3 |
+| **D. 315-5649 IOGA** | `memory.c` shim `IOGA[7]=0xFC` 等 | CS2 IOGA shadow + native resident 转写 HWRAM | Phase 3 |
+| **E. SMPC / 输入翻译** | shim `PDR=0x7F`、`SYSRES=复位` | Saturn SH-2 读 SMPC 手柄→翻译成 JAMMA/HWRAM | Phase 3 |
 | **F. EEPROM** | （未涉及） | FPGA 仿 93C46，存档到 SD | Phase 4 |
 
 ---
@@ -82,14 +82,20 @@ Saturn BIOS + clean HLE 下自动进入游戏并连续运行到 frame 3600，无
 移植实现应把这些 C 语义写成 SH-2 native routines 放进 CS0 保留区，再改写
 HWRAM dispatcher/游戏 veneer 指向它们；模拟器 host callback 本身不能直接搬到真机。
 
-### D. 315-5649 IOGA（FPGA）— Phase 3
+### D. 315-5649 IOGA（CS2 shadow + native resident）— Phase 3
 - 孪生：`memory.c` 在 page `0x040`（`0x00400000`）挂 idle stub，from-scratch boot 把 `IOGA[0x07]` shim 成 `0xFC`（bit0-1 清 = ready 握手）。
-- 真机：IOGA 不存在，**FPGA 要在 A-Bus 上响应 `0x00400000` 区**，实现 315-5649 的十几个寄存器（抄 MAME `stv.cpp` / `315_5649.cpp`）：ready 状态位、输入端口、投币、test/service。
+- 真机：IOGA 不存在，而且 `0x00400000` 不会产生卡槽 CS0/CS1/CS2 片选，
+  FPGA不能直接响应原地址。当前实现把 packed active-low 端口放在可达的
+  `0x25807020+` CS2 控制窗口，native VBlank poller 再生成 Baku 使用的
+  `0x06002864+` HWRAM 输入影子。详见
+  [IOGA 路由边界](superpowers/recon/2026-07-13-saroo-ioga-routing.md)。
 
 ### E. SMPC / 输入翻译 — Phase 3
 - 孪生 shim 了两处 SMPC：`SYSRES(0x0D)=复位 master SH2`、`PDR1/PDR2 读=0x7F`。
 - 真机：Saturn **有自己的 SMPC**（SYSRES 等原生），但 **ST-V 游戏要的是 ST-V JAMMA I/O**（投币/test/service/摇杆），Saturn SMPC 读的是 Saturn 手柄。
-- **STM32 固件**：读 Saturn 手柄状态 → 翻译成 JAMMA 位布局 → 写进 FPGA 的 IOGA 仿冒寄存器（D 模块）。Saturn 侧菜单加输入映射（如 Start→投币）。
+- 当前 PCB 的 STM32 不能直接读取 Saturn 控制器总线。生产输入路径应由
+  Saturn SH-2 通过 SMPC INTBACK 读取手柄，翻译成 JAMMA 位布局后写入 HWRAM
+  输入影子；FPGA CS2 shadow 用于 idle、自动测试和外部注入。
 - 注：孪生那两个 SMPC shim 主要是「跑 ST-V BIOS 引导」时才需要——真机走 trampoline 不跑 ST-V BIOS 引导，故 SYSRES shim 大概率不需要；但 PDR/端口的「ST-V idle 值」可能仍要靠 IOGA/固件呈现。
 
 ### F. EEPROM — Phase 4
@@ -105,7 +111,7 @@ HWRAM dispatcher/游戏 veneer 指向它们；模拟器 host callback 本身不�
 | `cs0.c` CART_STV ROM 映射 | → FPGA ROM 映射（A） |
 | `IOGA[7]=0xFC` 等 shim | → FPGA 做出 315-5649（D） |
 | ST-V BIOS ROM 当脚手架 | → **HLE 那几个被调的 BIOS 例程**（C，最难） |
-| SMPC `PDR=0x7F` shim | → STM32 读 Saturn 手柄翻译成 JAMMA（E） |
+| SMPC `PDR=0x7F` shim | → Saturn SH-2 读 SMPC 手柄并翻译成 JAMMA（E） |
 | 快照交接态 | → trampoline 计算式复刻 BIOS 初始化（B） |
 
 ---

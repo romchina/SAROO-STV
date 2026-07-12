@@ -47,6 +47,7 @@ def main() -> int:
         "stv_video_shutdown_fast": 0x04400F00,
         "stv_resident_handler_get": 0x04401100,
         "stv_resident_vector_get": 0x04401120,
+        "stv_resident_input_poll": 0x04401140,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -73,7 +74,10 @@ def main() -> int:
                   required["stv_memmove_reloc"], 0x06000100,
                   0x06000300, 0x06000304, 0x06000310, 0x06000314,
                   0x06000610, 0x0600063C, 0x06000660,
-                  0x06000A00, 0x06000B80, 0x06035278, 0xDEADE001):
+                  0x06000A00, 0x06000B80, 0x06035278, 0xDEADE001,
+                  0x25807020, 0x25807022, 0x25807024,
+                  0x06002864, 0x06002868, 0x0600286C,
+                  0x06002870, 0x06002874, 0x06000730):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 
