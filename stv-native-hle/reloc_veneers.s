@@ -583,6 +583,7 @@ stv_service_redirect_table:
     .long 0x00004596, stv_workspace_byte_set
     .long 0x00004680, stv_cart_layout_nibble
     .long 0x00003842, stv_channel_table_dispatch
+    .long 0x00004114, stv_bootstrap_handoff
 stv_service_redirect_table_end:
     .long 0x00000000, 0x00000000
 
@@ -731,3 +732,29 @@ resident_vblank_restore:
 resident_diag_ptr:          .long 0x06000BFC
 resident_exception_diag:    .long 0xDEADE001
 resident_handler_a00_irq:   .long 0x06000A00
+
+! Non-returning clean equivalent of the BIOS bootstrap transition at 0x4114.
+! The trampoline has already copied the FPR image, so record the observable
+! handoff state and enter the loaded game phase directly.
+    .org 0xA00, 0
+    .global stv_bootstrap_handoff
+stv_bootstrap_handoff:
+    mov.l   handoff_stack_top, r15
+    add     #-4, r15
+    mov.l   r4, @r15
+    mov.l   handoff_phase_ptr, r1
+    mov.l   handoff_phase_value, r0
+    mov.l   r0, @r1
+    mov.l   handoff_ready_ptr, r1
+    mov     #1, r0
+    mov.l   r0, @r1
+    mov.l   handoff_game_entry, r0
+    jmp     @r0
+    nop
+
+    .align 2
+handoff_stack_top:   .long 0x06100000
+handoff_phase_ptr:   .long 0x060002C4
+handoff_phase_value: .long 0x00003470
+handoff_ready_ptr:   .long 0x06000800
+handoff_game_entry:  .long 0x06010808

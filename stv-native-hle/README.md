@@ -36,6 +36,7 @@ Native clean-HLE leaf entries now implemented:
 | `0x4596` | `0x04400160` | workspace byte mirror |
 | `0x4680` | `0x044001A0` | cart-layout nibble |
 | `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
+| `0x4114` | `0x04400A00` | non-returning bootstrap game handoff |
 
 The same pairs are emitted as a machine-readable table at `0x04400700`,
 terminated by a zero record. Selectors `0/0x10/1/0x20` of `0x3842` have been
@@ -56,6 +57,12 @@ The handler entry points begin at `0x04400900`. The trampoline calls the
 initializer after copying the game and installing relocation veneers, then
 loads `VBR=0x06000000` and `GBR=0xFFFFFE00`. Interrupts remain masked during
 this diagnostic stage.
+
+`stv_bootstrap_handoff` reproduces the already-observed non-returning `0x4114`
+transition: it seeds the top-of-HWRAM stack, writes phase `0x3470` at
+`0x060002C4`, sets `[0x06000800]=1`, and jumps to `0x06010808`. It is present
+in the redirect metadata but the trampoline deliberately does not invoke it
+until the remaining `0x426C` system-transition dependency is implemented.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed
