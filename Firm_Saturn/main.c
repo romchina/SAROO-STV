@@ -310,7 +310,7 @@ int mem_test(int size)
 /**********************************************************/
 
 static int total_disc, total_page, page;
-static int sel_mode; // 0:game  1:binary
+static int sel_mode; // 0:game  1:binary  2:ST-V image
 
 MENU_DESC sel_menu;
 
@@ -347,6 +347,8 @@ static void fill_selmenu(void)
 
 	if(sel_mode==0){
 		sprintf(sel_menu.title, TT("选择游戏(%d/%d)"), page+1, total_page);
+	}else if(sel_mode==2){
+		sprintf(sel_menu.title, "ST-V images (%d/%d)", page+1, total_page);
 	}else{
 		sprintf(sel_menu.title, TT("选择文件(%d/%d)"), page+1, total_page);
 	}
@@ -449,13 +451,28 @@ static int sel_handle(int ctrl)
 				sprintf(buf, TT("游戏启动失败! %d"), retv);
 				menu_status(menu, buf);
 			}
-		}else{
+		}else if(sel_mode==1){
 			menu_status(menu, TT("加载文件中......"));
 			retv = run_binary(index, 1);
 			if(retv){
 				char buf[40];
 				sprintf(buf, TT("文件加载失败! %d"), retv);
 				menu_status(menu, buf);
+			}
+		}else{
+			menu_status(menu, "Loading ST-V image...");
+			SS_ARG = index;
+			SS_CMD = SSCMD_LOADSTV;
+			while(SS_CMD);
+			retv = (short)SS_ARG;
+			if(retv){
+				char buf[40];
+				sprintf(buf, "ST-V load failed! %d", retv);
+				menu_status(menu, buf);
+			}else{
+				menu_status(menu, "ST-V ready. Resetting...");
+				smpc_cmd(SYSRES);
+				while(1);
 			}
 		}
 	}else if(BUTTON_DOWN(ctrl, PAD_Z)){
@@ -503,6 +520,19 @@ void select_bins(void)
 	while(SS_CMD);
 }
 
+void select_stv(void)
+{
+	sel_mode = 2;
+	SS_CMD = SSCMD_LISTSTV;
+	while(SS_CMD);
+
+	if(SS_ARG==0)
+		select_game();
+
+	SS_CMD = SSCMD_LISTDISC;
+	while(SS_CMD);
+}
+
 
 /**********************************************************/
 
@@ -512,6 +542,7 @@ char *menu_str[] = {
 	"系统CD播放器",
 	"运行光盘游戏",
 	"运行二进制文件",
+	"运行 ST-V 镜像",
 	"串口调试工具",
 };
 int menu_str_nr = sizeof(menu_str)/sizeof(char*);
@@ -546,6 +577,9 @@ int main_handle(int ctrl)
 		select_bins();
 		return MENU_RESTART;
 	}else if(index==4){
+		select_stv();
+		return MENU_RESTART;
+	}else if(index==5){
 		menu_status(&main_menu, NULL);
 		return MENU_EXIT;
 	}else if(index==update_index){

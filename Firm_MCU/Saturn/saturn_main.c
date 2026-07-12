@@ -440,6 +440,16 @@ void ss_cmd_handle(void)
 		SS_ARG = retv;
 		SS_CMD = 0;
 		break;
+	case SSCMD_LISTSTV:
+		retv = list_stv(1);
+		SS_ARG = retv;
+		SS_CMD = 0;
+		break;
+	case SSCMD_LOADSTV:
+		retv = load_stv(SS_ARG);
+		SS_ARG = retv;
+		SS_CMD = 0;
+		break;
 	case SSCMD_LISTDISC:
 		// 列出镜像信息
 		retv = list_disc(0);

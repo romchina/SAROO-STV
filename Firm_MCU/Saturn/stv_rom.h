@@ -1,7 +1,8 @@
 /*
  * stv_rom — ST-V ROM loader for SAROO-STV.
  *
- * Reads a ROM image from SD, writes it into the SDRAM region reserved
+ * Streams a ROM image (up to one 32 MB CS0 image) from SD in 64 KB chunks,
+ * writes it into the SDRAM region reserved
  * for Phase 1+ ST-V use, configures the FPGA's CS0 ROM mode (sets
  * ss_cs0_type=00 via st_reg_ctrl and ss_rom_base via reg 0x30), then
  * returns an info struct the Saturn-side boot path can inspect.
@@ -26,7 +27,7 @@ typedef struct {
 /* Load a ROM image from `path` into SDRAM and switch FPGA to CS0 ROM mode.
  * Returns 0 on success, negative on error:
  *   -1: file open / read failure
- *   -2: ROM image larger than reserved SDRAM region
+ *   -2: empty/oversize image or SDRAM write failure
  */
 int stv_rom_load(const char *path, stv_rom_info_t *out);
 

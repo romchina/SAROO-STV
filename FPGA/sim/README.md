@@ -45,6 +45,9 @@ wsl -- bash -c 'cd /mnt/c/Users/mixio/Documents/GitHub/SAROO-STV/FPGA/sim && bas
   the attempted write).
 - **Phase 1 Task 4**: exercise `ss_rom_base` register via FSMC,
   verify base offset re-maps CS0 reads.
+- **SAROO port iteration 1**: verify STM32 SDRAM aperture bank reset and
+  high-address composition. Register `0x32` selects one of four 16 MB banks,
+  allowing the MCU loader to populate a full 32 MB CS0 image.
 
 ## Known gaps vs. real hardware
 

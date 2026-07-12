@@ -24,13 +24,17 @@
  * Saturn boot ROM / CD image grows past this boundary. */
 #define STV_ROM_SDRAM_OFFSET   (4u * 1024u * 1024u)
 #define STV_ROM_SDRAM_MAX      (48u * 1024u * 1024u)  /* CS0 32 MB + CS1 16 MB */
+#define STV_ROM_IMAGE_MAX      (32u * 1024u * 1024u)  /* Phase 1: one CS0 image */
 
 /* FPGA register map offsets (STM32 FSMC addr bits [7:0] with addr[24]=0) */
 #define FPGA_REG_CTRL          0x04   /* ss_reg_ctrl  — bits [13:12] = ss_cs0_type */
 #define FPGA_REG_ROM_BASE      0x30   /* ss_rom_base  — 1 MB units                */
+#define FPGA_REG_SDRAM_BANK    0x32   /* STM32 SDRAM aperture, 16 MB units        */
 
 #define SS_CS0_TYPE_ROM        (0u << 12)   /* 2'b00 in ss_reg_ctrl[13:12] */
 #define SS_CS0_TYPE_DATA_CART  (1u << 12)
+
+static void fpga_reg_write(uint32_t reg_off, uint16_t val);
 
 /* ---------------- Platform shims ----------------------------------- */
 
@@ -43,29 +47,63 @@
 uint8_t  g_mock_sdram[STV_ROM_SDRAM_MAX];
 uint16_t g_mock_fpga_ctrl;
 uint16_t g_mock_fpga_rom_base;
+uint16_t g_mock_fpga_sdram_bank;
+size_t   g_mock_sdram_fail_at = SIZE_MAX;
+unsigned g_mock_sdram_write_count;
+
+typedef FILE *stv_file_t;
 
 static int sdram_write(uint32_t offset, const void *data, size_t n)
 {
+    g_mock_sdram_write_count++;
+    if(offset + n > g_mock_sdram_fail_at) return -1;
     if(offset + n > sizeof(g_mock_sdram)) return -1;
+    g_mock_fpga_sdram_bank = (uint16_t)(offset >> 24);
     memcpy(g_mock_sdram + offset, data, n);
     return 0;
 }
 
-static int file_read_all(const char *path, void *buf, size_t cap, size_t *out_n)
+static int file_open(stv_file_t *file, const char *path, uint32_t *out_size)
 {
     FILE *f = fopen(path, "rb");
     if(!f) return -1;
-    *out_n = fread(buf, 1, cap, f);
-    fclose(f);
+    if(fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
+    long size = ftell(f);
+    if(size < 0 || (unsigned long)size > UINT32_MAX) {
+        fclose(f);
+        return -1;
+    }
+    if(fseek(f, 0, SEEK_SET) != 0) { fclose(f); return -1; }
+    *file = f;
+    *out_size = (uint32_t)size;
     return 0;
 }
+
+static int file_read(stv_file_t *file, void *buf, size_t n, size_t *out_n)
+{
+    *out_n = fread(buf, 1, n, *file);
+    return ferror(*file) ? -1 : 0;
+}
+
+static void file_close(stv_file_t *file) { fclose(*file); }
 
 static void fpga_reg_write(uint32_t reg_off, uint16_t val)
 {
     switch(reg_off) {
     case FPGA_REG_CTRL:     g_mock_fpga_ctrl     = val; break;
     case FPGA_REG_ROM_BASE: g_mock_fpga_rom_base = val; break;
+    case FPGA_REG_SDRAM_BANK: g_mock_fpga_sdram_bank = val; break;
     default: /* ignore */ break;
+    }
+}
+
+static uint16_t fpga_reg_read(uint32_t reg_off)
+{
+    switch(reg_off) {
+    case FPGA_REG_CTRL:     return g_mock_fpga_ctrl;
+    case FPGA_REG_ROM_BASE: return g_mock_fpga_rom_base;
+    case FPGA_REG_SDRAM_BANK: return g_mock_fpga_sdram_bank;
+    default: return 0;
     }
 }
 
@@ -73,16 +111,26 @@ static void fpga_reg_write(uint32_t reg_off, uint16_t val)
 
 #include "ff.h"
 
-/* Provided by board-support code (linker maps FSMC NOR/PSRAM banks). */
-extern volatile uint16_t * const FPGA_REG_BASE;        /* fsmc_addr[24]=0 */
-extern volatile uint16_t * const FPGA_SDRAM_BASE;      /* fsmc_addr[24]=1 */
+typedef FIL stv_file_t;
+
+/* STM32 FMC bank used by SAROO. Address bit 24 selects the raw SDRAM
+ * aperture instead of the FPGA register aperture. */
+#define FPGA_REG_BASE   ((volatile uint16_t *)0x60000000u)
+#define FPGA_SDRAM_BASE ((volatile uint16_t *)0x61000000u)
 
 static int sdram_write(uint32_t offset, const void *data, size_t n)
 {
+    uint32_t window_offset;
+
     /* FSMC SDRAM window is 16-bit wide; byte offsets must be even. */
     if(offset & 1) return -1;
+    if((offset >> 24) > 3u ||
+       (offset & 0x00FFFFFFu) + n > 0x01000000u)
+        return -1;
+    fpga_reg_write(FPGA_REG_SDRAM_BANK, (uint16_t)(offset >> 24));
+    window_offset = offset & 0x00FFFFFFu;
     const uint16_t *src = (const uint16_t *)data;
-    volatile uint16_t *dst = FPGA_SDRAM_BASE + (offset / 2);
+    volatile uint16_t *dst = FPGA_SDRAM_BASE + (window_offset / 2);
     for(size_t i = 0; i < n / 2; i++) dst[i] = src[i];
     if(n & 1) {
         /* Odd trailing byte — read-modify-write the last half-word. */
@@ -93,66 +141,105 @@ static int sdram_write(uint32_t offset, const void *data, size_t n)
     return 0;
 }
 
-static int file_read_all(const char *path, void *buf, size_t cap, size_t *out_n)
+static int file_open(stv_file_t *file, const char *path, uint32_t *out_size)
 {
-    FIL f;
-    if(f_open(&f, path, FA_READ) != FR_OK) return -1;
+    if(f_open(file, path, FA_READ) != FR_OK) return -1;
+    FSIZE_t size = f_size(file);
+    if(size > UINT32_MAX) {
+        f_close(file);
+        return -1;
+    }
+    *out_size = (uint32_t)size;
+    return 0;
+}
+
+static int file_read(stv_file_t *file, void *buf, size_t n, size_t *out_n)
+{
     UINT br = 0;
-    FRESULT rc = f_read(&f, buf, (UINT)cap, &br);
-    f_close(&f);
+    FRESULT rc = f_read(file, buf, (UINT)n, &br);
     *out_n = br;
     return rc == FR_OK ? 0 : -1;
 }
+
+static void file_close(stv_file_t *file) { f_close(file); }
 
 static void fpga_reg_write(uint32_t reg_off, uint16_t val)
 {
     FPGA_REG_BASE[reg_off / 2] = val;
 }
 
+static uint16_t fpga_reg_read(uint32_t reg_off)
+{
+    return FPGA_REG_BASE[reg_off / 2];
+}
+
 #endif  /* UNIT_TEST */
 
 /* ---------------- Public API --------------------------------------- */
 
-/* 2 MB stage buffer — sized to one f_read() pass on STM32.
- * Larger ROMs are chunked via the multi-pass loop below. */
-#define STAGE_BUF_BYTES   (2u * 1024u * 1024u)
-static uint8_t s_stage_buf[STAGE_BUF_BYTES];
+/* Keep the staging buffer small enough for the STM32 image. Full CS0 images
+ * are streamed through this buffer and never need to fit in MCU RAM. */
+#define STAGE_BUF_BYTES   (64u * 1024u)
+static uint8_t s_stage_buf[STAGE_BUF_BYTES] __attribute__((aligned(2)));
 
 int stv_rom_load(const char *path, stv_rom_info_t *out)
 {
-    if(!path || !out) return -1;
+    stv_file_t file;
+    uint32_t file_size;
+    uint32_t offset = 0;
 
-    /* Open + size-check in one pass. For Phase 1 we load the entire
-     * ROM in one shot (the STAGE_BUF_BYTES ceiling is a per-call cap;
-     * expand to multi-pass loading once Phase 2 needs >2 MB images). */
-    size_t total = 0;
-    if(file_read_all(path, s_stage_buf, STAGE_BUF_BYTES, &total) != 0)
+    if(!path || !out) return -1;
+    memset(out, 0, sizeof(*out));
+
+    if(file_open(&file, path, &file_size) != 0)
         return -1;
 
-    if(total > STV_ROM_SDRAM_MAX - STV_ROM_SDRAM_OFFSET)
+    if(file_size == 0 || file_size > STV_ROM_IMAGE_MAX ||
+       file_size > STV_ROM_SDRAM_MAX - STV_ROM_SDRAM_OFFSET) {
+        file_close(&file);
         return -2;
+    }
 
-    if(sdram_write(STV_ROM_SDRAM_OFFSET, s_stage_buf, total) != 0)
-        return -2;
+    while(offset < file_size) {
+        size_t want = file_size - offset;
+        size_t got = 0;
+        if(want > STAGE_BUF_BYTES) want = STAGE_BUF_BYTES;
+        if(file_read(&file, s_stage_buf, want, &got) != 0 || got != want) {
+            file_close(&file);
+            return -1;
+        }
+        if(sdram_write(STV_ROM_SDRAM_OFFSET + offset,
+                       s_stage_buf, got) != 0) {
+            file_close(&file);
+            return -2;
+        }
+        offset += (uint32_t)got;
+    }
+    file_close(&file);
 
     /* Configure FPGA: ss_cs0_type = 00 (ROM mode), ss_rom_base = offset / 1 MB. */
     uint16_t base_mb = (uint16_t)(STV_ROM_SDRAM_OFFSET / (1024u * 1024u));
+    uint16_t ctrl = fpga_reg_read(FPGA_REG_CTRL);
+    ctrl = (uint16_t)((ctrl & ~(3u << 12)) | SS_CS0_TYPE_ROM | 0x0100u);
     fpga_reg_write(FPGA_REG_ROM_BASE, base_mb);
-    fpga_reg_write(FPGA_REG_CTRL, SS_CS0_TYPE_ROM | 0x0100u);  /* keep existing default bits */
+    fpga_reg_write(FPGA_REG_CTRL, ctrl);
 
     out->sdram_base  = STV_ROM_SDRAM_OFFSET;
-    out->size        = (uint32_t)total;
+    out->size        = file_size;
     out->rom_base_mb = base_mb;
     return 0;
 }
 
 void stv_rom_unload(void)
 {
+    uint16_t ctrl = fpga_reg_read(FPGA_REG_CTRL);
     fpga_reg_write(FPGA_REG_ROM_BASE, 0);
+    fpga_reg_write(FPGA_REG_SDRAM_BANK, 0);
     /* Return to the SAROO default (bit 8 set, CS0 type = 00 Bootrom
      * — same encoding as ROM mode, but downstream code treats a zero
      * base as "no ST-V image loaded"). */
-    fpga_reg_write(FPGA_REG_CTRL, 0x0100u);
+    ctrl = (uint16_t)((ctrl & ~(3u << 12)) | 0x0100u);
+    fpga_reg_write(FPGA_REG_CTRL, ctrl);
 }
 
 uint32_t stv_rom_sdram_reserve_offset(void) { return STV_ROM_SDRAM_OFFSET; }

@@ -107,6 +107,8 @@
 #define SSCMD_FILERD   0x0006
 #define SSCMD_FILEWR   0x0007
 #define SSCMD_LISTBIN  0x0008
+#define SSCMD_LISTSTV  0x0009
+#define SSCMD_LOADSTV  0x000A
 
 
 #define MSF_TO_FAD(m,s,f) ((m * 4500) + (s * 75) + f)
@@ -333,6 +335,8 @@ u32 bswap32(u32 d);
 void init_toc(void);
 
 int list_bins(int show);
+int list_stv(int show);
+int load_stv(int index);
 int list_disc(int show);
 int load_disc(int index);
 int unload_disc(void);

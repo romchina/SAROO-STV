@@ -228,6 +228,7 @@ module SSMaster(
 			st_reg_ctrl <= 0;
 			st_reg_spi <= 3'b111;
 			ss_rom_base <= 16'h0000;
+			st_sdram_bank <= 2'b00;
 		end else if(st_wr_start==1) begin
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h04) st_reg_ctrl <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h16) st_reg_spi <= ST_AD[3:1];
@@ -237,12 +238,15 @@ module SSMaster(
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h26) ss_resp4 <= ST_AD;
 			// SAROO-STV: ROM base offset, 1 MB per unit
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h30) ss_rom_base <= ST_AD;
+			// STM32 raw SDRAM aperture bank, 16 MB per unit
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h32) st_sdram_bank <= ST_AD[1:0];
 		end
 	end
 
 	// SAROO-STV: ROM base register declaration (1 MB granularity).
 	// In CS0 ROM mode, ss_ram_addr = SS_ADDR + (ss_rom_base * 1 MB).
 	reg[15:0] ss_rom_base;
+	reg[1:0] st_sdram_bank;
 
 
 
@@ -399,6 +403,7 @@ module SSMaster(
 						(fsmc_addr[7:0]==8'h28)? ss_hirq :
 						(fsmc_addr[7:0]==8'h2a)? ss_hirq_mask :
 						(fsmc_addr[7:0]==8'h30)? ss_rom_base :
+						(fsmc_addr[7:0]==8'h32)? {14'b0, st_sdram_bank} :
 
 						16'hffff;
 	end
@@ -659,7 +664,9 @@ module SSMaster(
 
 	
 	// STM32 is LittleEndian system
-	wire[25:0] st_ram_addr = {2'b0, fsmc_addr[23:0]};
+	// The FMC data aperture is 16 MB wide. Select one of four SDRAM banks
+	// through register 0x32 so the MCU can stream a full 32 MB CS0 image.
+	wire[25:0] st_ram_addr = {st_sdram_bank, fsmc_addr[23:0]};
 	wire[ 1:0] st_mask = {ST_BL1,ST_BL0};
 	wire[15:0] st_ram_data_out;
 	wire st_ram_wait;

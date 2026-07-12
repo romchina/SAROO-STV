@@ -827,6 +827,16 @@
               <FilePath>.\Saturn\saturn_main.c</FilePath>
             </File>
             <File>
+              <FileName>stv_rom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Saturn\stv_rom.c</FilePath>
+            </File>
+            <File>
+              <FileName>stv_menu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Saturn\stv_menu.c</FilePath>
+            </File>
+            <File>
               <FileName>saturn_cdc.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Saturn\saturn_cdc.c</FilePath>

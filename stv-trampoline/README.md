@@ -47,13 +47,13 @@ Requires Ubuntu `binutils-sh-elf` (provides `sh-elf-as`, `sh-elf-ld`,
 
 ### On Saturn via SAROO
 
-Copy `trampoline.bin` to the SD card at
-`/SAROO/STV/phase1/trampoline.bin`. When the STM32 firmware's Task-6
-`stv_rom_load()` path is wired into the menu (Task 7 bring-up),
-selecting this entry will:
+Copy `trampoline.bin` to the SD card at `/SAROO/STV/trampoline.bin`.
+The `saroo-port-bakubaku` firmware source now exposes a “运行 ST-V 镜像” menu;
+after rebuilding and flashing the MCU/Saturn firmware, selecting this entry will:
 
 - Copy the binary into SDRAM at the 4 MB offset.
 - Write FPGA reg 0x30 `ss_rom_base = 4`.
+- Select raw SDRAM aperture banks through FPGA reg 0x32 while streaming.
 - Write FPGA reg 0x04 `ss_reg_ctrl = 0x0100` (ROM mode).
 - Reset the Saturn.
 

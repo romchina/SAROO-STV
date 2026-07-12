@@ -43,6 +43,8 @@ typedef unsigned long long u64;
 #define SSCMD_FILERD   0x0006
 #define SSCMD_FILEWR   0x0007
 #define SSCMD_LISTBINS 0x0008
+#define SSCMD_LISTSTV  0x0009
+#define SSCMD_LOADSTV  0x000A
 
 
 #define IMGINFO_ADDR   0x22080000

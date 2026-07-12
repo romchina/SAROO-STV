@@ -180,6 +180,29 @@ module tb_cs0_rom;
         #600000;
         $display("[TB] waited for SDRAM POR, t=%0t", $time);
 
+        // STM32 sees SDRAM through a 16 MB aperture. Register 0x32 supplies
+        // the two high address bits so a streaming loader can reach 64 MB.
+        if(dut.st_sdram_bank !== 2'b00) begin
+            $display("[TB] FAIL SDRAM aperture bank reset: got %0d",
+                     dut.st_sdram_bank);
+            fail_count = fail_count + 1;
+        end else begin
+            $display("[TB] PASS SDRAM aperture bank reset=0");
+        end
+        force dut.fsmc_addr = 25'h1001234;
+        force dut.st_sdram_bank = 2'b10;
+        #1;
+        if(dut.st_ram_addr !== 26'h2001234) begin
+            $display("[TB] FAIL SDRAM banked addr: got 0x%07x expected 0x2001234",
+                     dut.st_ram_addr);
+            fail_count = fail_count + 1;
+        end else begin
+            $display("[TB] PASS SDRAM bank 2 addr=0x%07x", dut.st_ram_addr);
+        end
+        release dut.st_sdram_bank;
+        release dut.fsmc_addr;
+        repeat(4) @(posedge CLK_50M);
+
         // SS_ADDR is byte-addressed (ss_ram_addr[0] is byte-in-word,
         // cachebus uses addr[2:1] to pick word-in-line).
         // Word 0 = byte 0x00: "SE"=0x5345
