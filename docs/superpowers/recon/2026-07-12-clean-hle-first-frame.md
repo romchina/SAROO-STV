@@ -28,9 +28,9 @@ STV_AUTOPLAY=1 STV_CLEAN_HLE=1 STV_NOLOW=1 STV_SHOT=300 \
 - `0x372C` channel address helper 已 HLE。
 - `0x3842` 已覆盖本次路径实际触达的 selector `0x00` 和 `0x10`，分别更新
   `0x06000840` 和 `0x06000830` 后 tail-jump 到 `[0x06000648]`。
-- `0x4114` 暂时作为 snapshot-only scaffold：快照已经完成启动，首个 vblank
-  中残留的 reset/service 条件会重复请求非返回式 boot；当前将这次重复 reset
-  抑制并返回。它不是最终真机 boot HLE。
+- `0x4114` 最初曾作为 snapshot-only scaffold 直接返回；后续已删除这个错误的
+  调用约定。attract 恢复现在只在快照边界标记当前 channel 已完成 bootstrap，
+  构造式路径则保留非返回 handoff 语义。
 
 ## 重要纠正
 
@@ -40,10 +40,10 @@ STV_AUTOPLAY=1 STV_CLEAN_HLE=1 STV_NOLOW=1 STV_SHOT=300 \
 
 ## 当前边界
 
-这个里程碑证明的是：**attract 快照 + Saturn BIOS + 当前 clean HLE 子集**可以
-持续处理中断并渲染，不再需要执行 ST-V BIOS ROM。它还没有消除 MAME 快照，
-也没有完成 `0x3842` 的其他 selector、真正的 `0x4114` boot 构造以及其余服务闭包。
-下一步应扩大自动游玩帧数，让运行轨迹逐个暴露剩余 selector / 服务入口。
+这个首帧里程碑证明的是：**attract 快照 + Saturn BIOS + 当前 clean HLE 子集**可以
+持续处理中断并渲染，不再需要执行 ST-V BIOS ROM。后续长跑已经补齐实际触达的
+`0x3842` selector，并推进到 frame 3600；MAME attract 快照仍只保留为运行期 oracle，
+不会作为真机 boot 方案。
 
 ## 延长回归与崩溃修复
 
@@ -89,6 +89,10 @@ GBR 重定向方案，把 `0x06038704` 当作空闲指针槽写入 `0x00003E4E`�
 - 无 `LOWEDGE` / `LOWPC`，主 SH-2 没有回落执行 ST-V BIOS 低地址代码；
 - 无新的 unimplemented HLE entry 或未知 `0x3842` selector；
 - 自动投币/开始后可进入游戏，并稳定推进到 frame 3600。
+
+删除 `0x4114` 伪返回后又重新回归到 frame 1200：画面已进入开局过渡，日志中没有
+`INVALID`、`LOWEDGE`、`LOWPC`、unimplemented entry 或 `bootstrap_handoff`，证明
+首个 vblank 不再靠运行时吞掉一次 bootstrap 调用。
 
 复现命令：
 

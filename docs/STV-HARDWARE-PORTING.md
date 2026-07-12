@@ -8,15 +8,17 @@
 
 ## 0. 关键前提：孪生的跑法在真机上不成立
 
-孪生（Yabause）现在能跑 bakubaku，靠两个**真机做不到**的手段：
+孪生（Yabause）有两条验证路径；其中快照恢复仍是真机做不到的测试脚手架：
 
 | 孪生手段 | 真机为何不行 |
 |---|---|
 | `--stvboot` 灌 MAME 捕获的 RAM 快照 | 真机没法注入 RAM 状态 |
-| `-a` 把 **ST-V BIOS 当 Saturn BIOS 加载**（`-b stv-jp-20091.bin`）| 真机 Saturn 的 BIOS 在主板 mask ROM 里，卡槽（A-Bus）改不了它 |
+| `-a` 把 **ST-V BIOS 当 Saturn BIOS 加载**（仅作 boot oracle）| 真机 Saturn 的 BIOS 在主板 mask ROM 里，卡槽（A-Bus）改不了它 |
 
-**孪生证明的是**：ST-V 游戏码能在 Saturn 硅片上正确执行与渲染（二进制兼容，已视觉验证——完整 attract + 从头 boot 的 SEGA WARNING 屏）。
-**孪生没证明、也无法直接移植的是**：让 stock Saturn「启动 ST-V BIOS」这条路——它在真机上是死路。
+**孪生现已证明**：在 stock Saturn BIOS 下，用 clean HLE 替代实际触达的 ST-V
+BIOS 运行期服务后，Baku Baku 可自动投币、进入游戏并稳定推进到 frame 3600。
+**仍不能直接移植的是** attract RAM 快照和“让 stock Saturn 启动 ST-V BIOS”这两条路；
+真机必须由 trampoline 计算式构造 boot 状态。
 
 ### 真机唯一可行的路
 
@@ -69,6 +71,16 @@ Saturn 上电 → 跑自己的 mask BIOS → IPL 引导 SAROO 卡
   - (a) **HLE**：手写这些 ST-V BIOS 例程的等价实现，放进卡/RAM，并 patch 游戏的调用点重定向；或
   - (b) **重定位**：trampoline 把需要的 ST-V BIOS 例程 copy 进一段 RAM/卡区，把游戏里对低地址的调用 patch 成指向那段。
 - **孪生的最大价值**：它能在能跑的环境里**精确枚举游戏到底调了哪些 ST-V BIOS 例程**，逐个 HLE 即可，不用盲猜整个 BIOS。
+
+**2026-07-12 更新：运行期 HLE oracle 已达到移植门槛。** Baku Baku 已在 stock
+Saturn BIOS + clean HLE 下自动进入游戏并连续运行到 frame 3600，无非法指令、
+低地址执行或未知入口。已验证语义包括 `0x0EFC`、`0x0ECC`、`0x2C64`、
+`0x2CAC`、`0x372C`、`0x3842`（`00/10/01/20`）、`0x3E4E`、`0x4596`、
+`0x4680`。详见
+[移植就绪边界](superpowers/recon/2026-07-12-saroo-port-readiness.md)。
+
+移植实现应把这些 C 语义写成 SH-2 native routines 放进 CS0 保留区，再改写
+HWRAM dispatcher/游戏 veneer 指向它们；模拟器 host callback 本身不能直接搬到真机。
 
 ### D. 315-5649 IOGA（FPGA）— Phase 3
 - 孪生：`memory.c` 在 page `0x040`（`0x00400000`）挂 idle stub，from-scratch boot 把 `IOGA[0x07]` shim 成 `0xFC`（bit0-1 清 = ready 握手）。
