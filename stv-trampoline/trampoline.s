@@ -88,21 +88,10 @@ alias_entry:
     ! full 32-bit immediates aren't a single-instruction op on SH-2.
     mov.l   stack_top_ptr, r15
 
-    ! The ST-V BIOS normally leaves a 4 KB "SEGA" sentinel page at
-    ! 0x0600F000, then copies FPR byte 0x1000 through the top of HWRAM.
-    ! Materialize that exact clean-boot layout without depending on a
-    ! proprietary resident/BIOS dump.
-    mov.l   game_page_ptr, r1
-    mov.l   sega_word_ptr, r2
-    mov.l   sega_long_count_ptr, r3
-fill_sega_page:
-    mov.l   r2, @r1
-    add     #4, r1
-    dt      r3
-    bf      fill_sega_page
-
+    ! Copy the complete 1 MB FPR to its linked HWRAM addresses.  The clean
+    ! resident constructor subsequently replaces 0x06000000..0x0600EFFF,
+    ! leaving the game body at raw FPR offset 0xF000 and above intact.
     ! Native CS1 long-copy service: r4=dst, r5=src, r6=long count.
-    ! 0x3C000 longs = 0xF0000 bytes, ending exactly at 0x060FFFFF.
     mov.l   game_dst_ptr, r4
     mov.l   game_src_ptr, r5
     mov.l   game_long_count_ptr, r6
@@ -129,7 +118,8 @@ call_resident_init:
     mov.l   gbr_base_ptr, r0
     ldc     r0, gbr
 
-    ! Verify the first copied instruction against fpr17969.13 offset 0x1000.
+    ! Verify the first game word surviving the resident overlay against
+    ! fpr17969.13 offset 0xF000.
     ! A mismatch gets a distinct heartbeat and red screen; success remains
     ! the established magenta diagnostic.
 verify_game_copy:
@@ -195,13 +185,10 @@ heartbeat_val_ptr:  .long 0x5AA5A55A
 failure_val_ptr:    .long 0xDEAD1000
 alias_entry_ptr:    .long alias_entry + 0x02F00000
 overlay_ctrl_ptr:   .long 0x2580701C
-game_page_ptr:      .long 0x0600F000
-sega_word_ptr:      .long 0x53454741
-sega_long_count_ptr:.long 0x00000400
-game_dst_ptr:       .long 0x06010000
-game_src_ptr:       .long 0x02201000
-game_long_count_ptr:.long 0x0003C000
-game_first_word_ptr:.long 0x4F22B0C3
+game_dst_ptr:       .long 0x06000000
+game_src_ptr:       .long 0x02200000
+game_long_count_ptr:.long 0x00040000
+game_first_word_ptr:.long 0x1F35A013
 hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
 hle_resident_init_ptr:.long 0x04400800
