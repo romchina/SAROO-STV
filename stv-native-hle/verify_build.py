@@ -45,6 +45,8 @@ def main() -> int:
         "stv_resident_copy_20": 0x04400D00,
         "stv_install_resident_veneers": 0x04400E00,
         "stv_video_shutdown_fast": 0x04400F00,
+        "stv_resident_handler_get": 0x04401100,
+        "stv_resident_vector_get": 0x04401120,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -69,9 +71,18 @@ def main() -> int:
                   0x0604AFD4, 0x06053C98, 0xD001402B, 0x00090009,
                   required["stv_long_copy_reloc"],
                   required["stv_memmove_reloc"], 0x06000100,
-                  0x06000610, 0x06000A00, 0x06035278):
+                  0x06000300, 0x06000304, 0x06000310, 0x06000314,
+                  0x06000610, 0x0600063C, 0x06000660,
+                  0x06000A00, 0x06035278):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
+
+    for value in (0x060FFFDC, 0x060D28C8, 0x06010660, 0xFF79A6F1,
+                  0x00000120, 0x20180108, 0x45A07058,
+                  0x39A0500E, 0x0601025E, 0x06010006, 0x06083238,
+                  0x0001FFFF):
+        if value.to_bytes(4, "big") not in raw:
+            raise SystemExit(f"handoff state word absent: {value:#010x}")
 
     redirects = (
         (0x00000EFC, 0x04400260),

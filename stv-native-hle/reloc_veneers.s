@@ -637,6 +637,12 @@ resident_exception_loop:
     mov.l   resident_service_610, r1
     mov.l   resident_clock_ptr, r0
     mov.l   r0, @r1
+    mov.l   resident_service_63c, r1
+    mov.l   resident_channel_address_ptr, r0
+    mov.l   r0, @r1
+    mov.l   resident_service_660, r1
+    mov.l   resident_copy_20_ptr, r0
+    mov.l   r0, @r1
     mov.l   resident_callback_640, r1
     mov.l   resident_noop_ptr, r0
     mov.l   r0, @r1
@@ -652,6 +658,7 @@ resident_exception_loop:
     mov.l   resident_transition_pending, r1
     mov     #1, r0
     mov.l   r0, @r1
+
 
     mov.l   resident_handler_a00, r1
     mov.l   resident_game_vblank, r0
@@ -678,6 +685,8 @@ resident_clear_longs:     .long 0x00003C00
 resident_vector_count:    .long 0x00000100
 resident_vblank_vector:   .long 0x06000100
 resident_service_610:     .long 0x06000610
+resident_service_63c:     .long 0x0600063C
+resident_service_660:     .long 0x06000660
 resident_callback_640:    .long 0x06000640
 resident_callback_644:    .long 0x06000644
 resident_callback_648:    .long 0x06000648
@@ -690,6 +699,8 @@ resident_exception_ptr:   .long stv_resident_exception
 resident_irq_return_ptr:  .long stv_resident_irq_return
 resident_vblank_ptr:      .long stv_resident_vblank
 resident_clock_ptr:       .long stv_vblank_clock_update
+resident_channel_address_ptr: .long stv_channel_address
+resident_copy_20_ptr:     .long stv_resident_copy_20
 resident_noop_ptr:        .long stv_resident_noop
 resident_game_vblank:     .long 0x06035278
 resident_game_aux:        .long 0x06035C48
@@ -758,25 +769,11 @@ resident_handler_a00_irq:   .long 0x06000A00
     .org 0xA00, 0
     .global stv_bootstrap_handoff
 stv_bootstrap_handoff:
-    mov.l   handoff_stack_top, r15
-    add     #-4, r15
-    mov.l   r4, @r15
-    mov.l   handoff_phase_ptr, r1
-    mov.l   handoff_phase_value, r0
-    mov.l   r0, @r1
-    mov.l   handoff_ready_ptr, r1
-    mov     #1, r0
-    mov.l   r0, @r1
-    mov.l   handoff_game_entry, r0
+    mov.l   handoff_extended_ptr, r0
     jmp     @r0
     nop
-
     .align 2
-handoff_stack_top:   .long 0x06100000
-handoff_phase_ptr:   .long 0x060002C4
-handoff_phase_value: .long 0x00003470
-handoff_ready_ptr:   .long 0x06000800
-handoff_game_entry:  .long 0x06010808
+handoff_extended_ptr: .long stv_bootstrap_handoff_extended
 
 ! Baku Baku's observed 0x426C path is called once with r4=0.  The handler
 ! pointers remain unchanged; its resident-state contract is to consume the
@@ -1045,6 +1042,20 @@ stv_install_resident_veneers:
     mov.l   resident_c0a_target, r0
     mov.l   r0, @r1
 
+    ! Restore the pointer/vector API slots which overlap the VBR page.
+    mov.l   resident_slot_300_e, r1
+    mov.l   resident_handler_set_e, r0
+    mov.l   r0, @r1
+    mov.l   resident_slot_304_e, r1
+    mov.l   resident_handler_get_e, r0
+    mov.l   r0, @r1
+    mov.l   resident_slot_310_e, r1
+    mov.l   resident_vector_set_e, r0
+    mov.l   r0, @r1
+    mov.l   resident_slot_314_e, r1
+    mov.l   resident_vector_get_e, r0
+    mov.l   r0, @r1
+
     mov.l   resident_veneer_table_ptr_e, r1
 resident_veneer_loop:
     mov.l   @r1+, r2
@@ -1069,6 +1080,14 @@ resident_c20_ptr:    .long 0x06000C20
 resident_c24_ptr:    .long 0x06000C24
 resident_c00_target: .long stv_resident_mask_set
 resident_c0a_target: .long stv_resident_mask_update
+resident_slot_300_e: .long 0x06000300
+resident_slot_304_e: .long 0x06000304
+resident_slot_310_e: .long 0x06000310
+resident_slot_314_e: .long 0x06000314
+resident_handler_set_e: .long stv_resident_handler_set
+resident_handler_get_e: .long stv_resident_handler_get
+resident_vector_set_e:  .long stv_resident_vector_set
+resident_vector_get_e:  .long stv_resident_vector_get
 resident_abs_op0:    .long 0xD001402B
 resident_abs_op1:    .long 0x00090009
 resident_veneer_table_ptr_e: .long resident_veneer_table
@@ -1108,3 +1127,94 @@ stv_video_shutdown_fast:
     .align 2
 video_tvmd_ptr:        .long 0x25F80000
 video_default_handler: .long stv_resident_exception
+
+    .org 0xF40, 0
+stv_bootstrap_handoff_extended:
+    ! Recreate the measured BIOS->game frame at the first 0x06010808 entry.
+    mov.l   handoff_stack_seed_ptr, r1
+    mov.l   handoff_stack_base, r2
+    mov     #8, r3
+handoff_stack_loop:
+    mov.l   @r1+, r0
+    mov.l   r0, @r2
+    add     #4, r2
+    dt      r3
+    bf      handoff_stack_loop
+
+    mov.l   handoff_phase_ptr, r1
+    mov.l   handoff_phase_value, r0
+    mov.l   r0, @r1
+    mov.l   handoff_ready_ptr, r1
+    mov     #1, r0
+    mov.l   r0, @r1
+    mov.l   handoff_game_index_ptr, r1
+    mov.l   handoff_game_index_0, r0
+    mov.l   r0, @r1
+    mov.l   handoff_game_index_1, r0
+    mov.l   r0, @(4, r1)
+
+    mov.l   handoff_gbr, r0
+    ldc     r0, gbr
+    mov.l   handoff_initial_pr, r0
+    lds     r0, pr
+    mov     #0, r0
+    ldc     r0, sr
+
+    mov.l   handoff_stack_base, r15
+    mov     #0, r14
+    mov     #0, r13
+    mov     #0, r12
+    mov     #0, r11
+    mov     #0, r10
+    mov.l   handoff_game_entry, r9
+    mov     #0, r8
+    mov.l   handoff_r7, r7
+    mov     #0, r6
+    mov.l   handoff_r5, r5
+    mov.l   handoff_r4, r4
+    mov     #0, r3
+    mov     #0x10, r2
+    mov.l   handoff_r1, r1
+    mov     #0, r0
+    jmp     @r9
+    mov     #0, r9
+
+    .align 2
+handoff_stack_base:  .long 0x060FFFDC
+handoff_phase_ptr:   .long 0x060002C4
+handoff_phase_value: .long 0x00003470
+handoff_ready_ptr:   .long 0x06000800
+handoff_game_index_ptr: .long 0x06083238
+handoff_game_index_0:   .long 0x0001FFFF
+handoff_game_index_1:   .long 0x00000001
+handoff_game_entry:  .long 0x06010808
+handoff_gbr:         .long 0x060D28C8
+handoff_initial_pr:  .long 0x06010660
+handoff_r1:          .long 0xFF79A6F1
+handoff_r4:          .long 0x00000120
+handoff_r5:          .long 0x20180108
+handoff_r7:          .long 0x45A07058
+handoff_stack_seed_ptr: .long handoff_stack_seed
+handoff_stack_seed:
+    .long 0x39A0500E, 0x00000000, 0x20180108, 0x45A00000
+    .long 0x0601025E, 0x00000000, 0x00000000, 0x06010006
+
+    .org 0x1100, 0
+    .global stv_resident_handler_get
+stv_resident_handler_get:
+    mov.l   resident_handler_table_get, r0
+    shll2   r4
+    mov.l   @(r0, r4), r0
+    rts
+    nop
+    .align 2
+resident_handler_table_get: .long 0x06000900
+
+    .org 0x1120, 0
+    .global stv_resident_vector_get
+stv_resident_vector_get:
+    stc     vbr, r0
+    shll2   r4
+    mov.l   @(r0, r4), r0
+    rts
+    nop

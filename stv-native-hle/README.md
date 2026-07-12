@@ -56,14 +56,28 @@ IRQ return, and a register-preserving VBLANK-IN wrapper. It also connects the
 verified Baku Baku vblank callback (`0x06035278`) to the native clock service
 through `[0x06000610]`.
 
+The cold twin also confirmed that both channel-address call sites dispatch
+through `[0x0600063C]`; the constructor binds that slot directly to native
+`0x044001E0`.
+The game state-copy call through `[0x06000660]` is similarly bound to the
+clean 20-byte resident copy at `0x04400D00`.
+
+The upper VBR page doubles as the resident API table. The constructor restores
+`[0x300/0x304]` as handler set/get and `[0x310/0x314]` as vector set/get,
+using native getters at `0x04401100/0x04401120`. This prevents service calls
+from accidentally entering the default interrupt `RTE` handler.
+
 The handler entry points begin at `0x04400900`. The trampoline calls the
 initializer after copying the game and installing relocation veneers, then
 loads `VBR=0x06000000` and `GBR=0xFFFFFE00`. Interrupts remain masked during
 this diagnostic stage.
 
-`stv_bootstrap_handoff` reproduces the already-observed non-returning `0x4114`
-transition: it seeds the top-of-HWRAM stack, writes phase `0x3470` at
-`0x060002C4`, sets `[0x06000800]=1`, and jumps to `0x06010808`. It is present
+`stv_bootstrap_handoff` reproduces the measured non-returning `0x4114`
+transition: it builds the 32-byte frame at `0x060FFFDC`, restores the observed
+register state (`GBR=0x060D28C8`, `R4=0x120`, `R5=0x20180108`,
+`R7=0x45A07058`), writes phase `0x3470` at `0x060002C4`, sets
+`[0x06000800]=1`, seeds the observed selector bytes at `0x06083238`, and
+jumps to `0x06010808`. It is present
 in the redirect metadata but the trampoline deliberately does not invoke it
 until the clean hardware initialization and remaining resource/sound closure
 are ready for an end-to-end cold-start attempt.
@@ -120,3 +134,10 @@ Finally, a 70-second integration run redirected every clean-HLE entry to these
 CS1 routines. It completed without invalid opcodes, low-ROM execution or an
 unimplemented service. The Yabause mapping/redirect hooks were removed after
 the run.
+
+The full clean cold path was then exercised with a temporary SAROO-equivalent
+CS0/CS1 executable mapping: shifted FPR construction, native resident init,
+measured `0x4114` handoff frame, and game execution ran for 60 seconds with
+`STV_NOLOW` and invalid-opcode tracing enabled. No low BIOS edge, exception,
+invalid opcode, or unimplemented service occurred. The temporary twin mapping
+and probes were removed after the run.
