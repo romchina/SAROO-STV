@@ -20,8 +20,9 @@ Build and statically verify with:
 make test-build
 ```
 
-The remaining complex system-transition services (`0x426C` and the resource/
-sound initialization closure) are not part of this native module yet.
+The remaining resource/sound initialization closure is not part of this
+native module yet. Hardware reset initialization remains owned by the clean
+trampoline rather than the service dispatcher.
 
 Native clean-HLE leaf entries now implemented:
 
@@ -37,6 +38,7 @@ Native clean-HLE leaf entries now implemented:
 | `0x4680` | `0x044001A0` | cart-layout nibble |
 | `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
 | `0x4114` | `0x04400A00` | non-returning bootstrap game handoff |
+| `0x426C` | `0x04400A40` | Baku handler/system transition fast path |
 
 The same pairs are emitted as a machine-readable table at `0x04400700`,
 terminated by a zero record. Selectors `0/0x10/1/0x20` of `0x3842` have been
@@ -62,7 +64,15 @@ this diagnostic stage.
 transition: it seeds the top-of-HWRAM stack, writes phase `0x3470` at
 `0x060002C4`, sets `[0x06000800]=1`, and jumps to `0x06010808`. It is present
 in the redirect metadata but the trampoline deliberately does not invoke it
-until the remaining `0x426C` system-transition dependency is implemented.
+until the clean hardware initialization and remaining resource/sound closure
+are ready for an end-to-end cold-start attempt.
+
+The Baku-specific `0x426C` path was captured at its sole runtime call
+(`R4=0`). Its clean implementation consumes `[0x06000324]`, sets bit `0x80`
+in `[0x06000824]`, preserves the handler pointers, and reproduces the observed
+return registers. Concurrent changes to the vblank accumulator were excluded
+from the contract. The associated display/SCU/SCSP reset is intentionally a
+separate trampoline responsibility.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed

@@ -32,6 +32,7 @@ def main() -> int:
         "stv_resident_init": 0x04400800,
         "stv_resident_exception": 0x04400900,
         "stv_bootstrap_handoff": 0x04400A00,
+        "stv_handler_table_update": 0x04400A40,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -71,6 +72,7 @@ def main() -> int:
         (0x00004680, 0x044001A0),
         (0x00003842, 0x04400400),
         (0x00004114, 0x04400A00),
+        (0x0000426C, 0x04400A40),
         (0x00000000, 0x00000000),
     )
     table = b"".join(

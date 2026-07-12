@@ -584,6 +584,7 @@ stv_service_redirect_table:
     .long 0x00004680, stv_cart_layout_nibble
     .long 0x00003842, stv_channel_table_dispatch
     .long 0x00004114, stv_bootstrap_handoff
+    .long 0x0000426C, stv_handler_table_update
 stv_service_redirect_table_end:
     .long 0x00000000, 0x00000000
 
@@ -758,3 +759,33 @@ handoff_phase_ptr:   .long 0x060002C4
 handoff_phase_value: .long 0x00003470
 handoff_ready_ptr:   .long 0x06000800
 handoff_game_entry:  .long 0x06010808
+
+! Baku Baku's observed 0x426C path is called once with r4=0.  The handler
+! pointers remain unchanged; its resident-state contract is to consume the
+! pending transition flag and mark system initialization complete.  Hardware
+! reset/initialization is owned by the clean trampoline layer.
+    .org 0xA40, 0
+    .global stv_handler_table_update
+stv_handler_table_update:
+    mov.l   handler_pending_ptr, r1
+    mov     #0, r0
+    mov.l   r0, @r1
+    mov.l   handler_status_ptr, r1
+    mov.l   @r1, r0
+    mov     #0x40, r2
+    shll    r2
+    or      r2, r0
+    mov.l   r0, @r1
+
+    ! Match the caller-visible scratch registers captured at the return PC.
+    mov     #0x10, r0
+    mov     #1, r4
+    shll8   r4
+    mov.l   handler_r5_value, r5
+    rts
+    nop
+
+    .align 2
+handler_pending_ptr: .long 0x06000324
+handler_status_ptr:  .long 0x06000824
+handler_r5_value:    .long 0x06000C34
