@@ -31,7 +31,7 @@
 | `0x44FC` | `cart_transfer_entry` | 卡带传输服务入口，转入 `0x4500`。 |
 | `0x4500` | `cart_transfer_dispatch` | 按 `[0x06000656]` 选择 `(src,dst,len,cont)` 描述符。 |
 | `0x4526` | `cart_transfer_copy` | 校验/修正卡带源地址，逐 word 复制，随后跳 `cont`。 |
-| `0x4596` | `workspace_byte_set` | `[0x0600065A + r4] = r5.byte`。 |
+| `0x4596` | `workspace_byte_set` | 把 `r5.byte` 同时写到 `[0x0600065A+r4]` 和 `[0x20100075+2*r4]`，返回 `r0=2*r4`。 |
 | `0x4648` | `smpc_command_handshake` | 对 SMPC `SF` 做等待握手并向 `COMREG` 写 `r4.byte`。 |
 | `0x4680` | `cart_layout_nibble` | 从 HWRAM 配置字中按布局模式取 4-bit bank/layout 值。 |
 
