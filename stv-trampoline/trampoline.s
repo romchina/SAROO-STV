@@ -143,6 +143,9 @@ verify_game_copy:
     mov.l   heartbeat_val_ptr, r2
     mov.l   r2, @r1
     mov.w   magenta_val, r4
+    .ifdef ENTER_GAME
+    mov     #1, r8
+    .endif
     bra     show_status
     nop
 
@@ -151,6 +154,9 @@ copy_failed:
     mov.l   failure_val_ptr, r2
     mov.l   r2, @r1
     mov.w   red_val, r4
+    .ifdef ENTER_GAME
+    mov     #0, r8
+    .endif
 
 show_status:
 
@@ -180,6 +186,15 @@ show_status:
     mov.l   vdp2_vram_ptr,  r3
     mov.w   r4, @r3                        ! magenta=success, red=copy failure
 
+    .ifdef ENTER_GAME
+    tst     r8, r8
+    bt      halt
+    mov     #0, r4
+    mov.l   hle_bootstrap_ptr, r0
+    jmp     @r0
+    nop
+    .endif
+
     ! ---- Halt: infinite NOP loop ----
 halt:
     nop
@@ -203,6 +218,9 @@ game_first_word_ptr:.long 0x4F22B0C3
 hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
 hle_resident_init_ptr:.long 0x04400800
+    .ifdef ENTER_GAME
+hle_bootstrap_ptr:   .long 0x04400A00
+    .endif
 vbr_base_ptr:       .long 0x06000000
 gbr_base_ptr:       .long 0xFFFFFE00
 vdp2_tvmd_ptr:      .long 0x25F80000

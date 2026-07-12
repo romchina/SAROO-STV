@@ -11,11 +11,15 @@ ASFLAGS := --big --isa=sh2
 LDFLAGS := -T ldscript
 
 OBJ := trampoline.o
+RUN_OBJ := trampoline-run.o
 
 all: trampoline.bin
 
 %.o: %.s
 	$(AS) $(ASFLAGS) -o $@ $<
+
+trampoline-run.o: trampoline.s
+	$(AS) $(ASFLAGS) --defsym ENTER_GAME=1 -o $@ $<
 
 trampoline.elf: $(OBJ) ldscript
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
@@ -23,6 +27,13 @@ trampoline.elf: $(OBJ) ldscript
 trampoline.bin: trampoline.elf
 	$(OBJCOPY) -O binary $< $@
 	@echo "Size: $$(stat -c%s $@) bytes"
+
+trampoline-run.elf: $(RUN_OBJ) ldscript
+	$(LD) $(LDFLAGS) $(RUN_OBJ) -o $@
+
+trampoline-run.bin: trampoline-run.elf
+	$(OBJCOPY) -O binary $< $@
+	@echo "Run size: $$(stat -c%s $@) bytes"
 
 # Predictive test: wrap as a CUE/BIN and run Mednafen.
 # Mednafen actually wants a MODE1/2352 CD image. Pad with 2048-byte data
@@ -39,7 +50,11 @@ test-build: trampoline.bin
 	@echo "Disassembly of _start:"
 	@sh-elf-objdump -d -j .text trampoline.elf
 
-clean:
-	rm -f $(OBJ) trampoline.elf trampoline.bin
+test-run: trampoline-run.bin
+	python3 verify_build.py trampoline-run.elf trampoline-run.bin
+	@python3 -c 'from pathlib import Path; assert bytes.fromhex("04400a00") in Path("trampoline-run.bin").read_bytes(); print("verified run handoff 0x04400A00")'
 
-.PHONY: all clean test-build
+clean:
+	rm -f $(OBJ) $(RUN_OBJ) trampoline.elf trampoline.bin trampoline-run.elf trampoline-run.bin
+
+.PHONY: all clean test-build test-run

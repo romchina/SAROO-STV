@@ -54,6 +54,7 @@ we invest in the full toolchain.
 ```bash
 make                 # produces trampoline.bin
 make test-build      # also prints the disassembly
+make test-run        # opt-in trampoline-run.bin with native game handoff
 make clean
 ```
 
@@ -108,6 +109,17 @@ name, and region flags are all in the expected places — i.e. our
 cart-boot header is byte-compatible with Saturn's CD-boot header
 parser. Full boot verification (seeing magenta on screen) requires
 installing a real Saturn BIOS or running on real hardware.
+
+## Opt-in game-entry build
+
+`trampoline-run.bin` performs the same red/magenta diagnostics as the default
+build. After successful copy and resident construction it sets `R4=0` and
+jumps to the non-returning native handoff at `0x04400A00`; a failed copy stays
+on the red halt screen.
+
+The standard `trampoline.bin` deliberately continues to halt on magenta, so
+the known-good hardware diagnostic remains available while game entry is
+being stabilized.
 
 ## Layout
 
