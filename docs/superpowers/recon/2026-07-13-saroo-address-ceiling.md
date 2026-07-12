@@ -66,11 +66,15 @@ image offset `0x13B96CB`。临时 twin 修改在验证后已全部撤销。
 | `0x372C` | `0x044001E0` | channel 地址与符号扩展 |
 | `0x2CAC` | `0x04400220` | 返回值及 5-byte memset |
 
-连同已有 `0x2C64` memmove，已实现服务对在 `0x04400300` 输出固定的
+连同已有 `0x2C64` memmove，已实现服务对在 `0x04400700` 输出固定的
 original→native redirect table。Yabause SH-2 interpreter 直接执行上述入口，
-11 项寄存器/内存断言全部通过；自测 harness 随后撤销。运行期 clean-HLE 还剩
-`0x0EFC` vblank update 和 `0x3842` channel-table dispatch 两个复杂入口。
+11 项寄存器/内存断言全部通过；自测 harness 随后撤销。
 
 当前第四迭代已提供 `0x04400260` vblank steady-state 和
-`0x04400400` channel dispatch（selector 0/10/1/20）；selector 0 已在 SH-2
-twin 中动态验证，overflow 与 selector 1/20 边界向量仍待补齐。
+`0x04400400` channel dispatch（selector 0/10/1/20）。
+
+随后边界回归已补齐：selector `1` 的负→非负饱和结果为 `0xFFFFFFFF`，
+selector `0x20` 的 accumulated/lower/upper 为 `0x110/0x200/0x200`；vblank
+overflow 更新 accumulator 为 `0x95929FAD`、strided counter 饱和为
+`0xFFFFFFFF`，寄存器尾态与 clean-HLE 一致。最终 70 秒集成运行把全部
+clean-HLE handler 替换为 CS1 native 入口，未出现 invalid/low-PC。

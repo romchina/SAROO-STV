@@ -38,10 +38,10 @@ Native clean-HLE leaf entries now implemented:
 | `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
 
 The same pairs are emitted as a machine-readable table at `0x04400300`,
-terminated by a zero record. Selector 0 of `0x3842` has been dynamically
-executed on the SH-2 twin; selector 1/10/20 boundary coverage is pending. The
-vblank routine covers the steady-state path, while its overflow callback branch
-still needs a dedicated vector.
+terminated by a zero record. Selectors `0/0x10/1/0x20` of `0x3842` have been
+dynamically executed with simple, signed-saturation and range-bound vectors.
+The vblank steady-state and signed-overflow/strided-counter paths are also
+dynamically covered.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed
@@ -51,3 +51,8 @@ execution. Those temporary twin changes were removed after the run.
 The six new leaf routines were also executed directly by Yabause's SH-2
 interpreter with injected register/HWRAM vectors. Eleven return-value and memory
 assertions passed; the temporary self-test harness was removed afterwards.
+
+Finally, a 70-second integration run redirected every clean-HLE entry to these
+CS1 routines. It completed without invalid opcodes, low-ROM execution or an
+unimplemented service. The Yabause mapping/redirect hooks were removed after
+the run.

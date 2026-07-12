@@ -280,16 +280,57 @@ memset_done:
 stv_vblank_clock_update:
     mov.l   vblank_acc_ptr, r1
     mov.l   @r1, r2
+    mov     r2, r4
     mov.l   vblank_increment, r3
     add     r3, r2
     mov.l   r2, @r1
     mov     r1, r7
     mov     r3, r0
+    cmp/pz  r4
+    bf      vblank_done
+    cmp/pz  r2
+    bt      vblank_done
+
+    sts.l   pr, @-r15
+    mov.l   r8, @-r15
+    mov.l   vblank_strided_base, r4
+    bsr     stv_read_strided_long
+    nop
+    mov     r0, r8
+    mov     r0, r6
+    add     #3, r6
+    cmp/pz  r8
+    bt      vblank_counter_ready
+    cmp/pz  r6
+    bf      vblank_counter_ready
+    mov     #-1, r6
+vblank_counter_ready:
+    mov     r6, r5
+    mov.l   vblank_strided_base, r4
+    bsr     stv_write_strided_long
+    nop
+    mov     r8, r4
+    mov.l   @r15+, r8
+    lds.l   @r15+, pr
+    mov.l   vblank_acc_ptr, r7
+    mov.l   vblank_callback_ptr, r1
+    mov.l   vblank_strided_byte, r5
+    mov     r6, r0
+    shlr8   r0
+    shlr8   r0
+    shlr8   r0
+    mov     r0, r6
+    mov     #0, r0
+    mov     #0, r2
+vblank_done:
     rts
     nop
     .align 2
 vblank_acc_ptr:   .long 0x06000758
 vblank_increment: .long 0x55929FAD
+vblank_strided_base: .long 0x20180000
+vblank_strided_byte: .long 0x20180001
+vblank_callback_ptr: .long 0x06000544
 
 ! ---------------------------------------------------------------------------
 ! BIOS 0x3842 channel table dispatch.  The four selectors used by Baku Baku
@@ -396,7 +437,14 @@ channel_delta:
     mov.l   channel_delta_base_a, r4
     bsr     stv_read_strided_long
     nop
+    mov     r0, r6
     add     r7, r0
+    cmp/pz  r6
+    bt      delta_a_ready
+    cmp/pz  r0
+    bf      delta_a_ready
+    mov     #-1, r0
+delta_a_ready:
     mov     r0, r6
     mov     r6, r5
     mov.l   channel_delta_base_a, r4
@@ -405,7 +453,14 @@ channel_delta:
     mov.l   channel_delta_base_b, r4
     bsr     stv_read_strided_long
     nop
+    mov     r0, r6
     add     r7, r0
+    cmp/pz  r6
+    bt      delta_b_ready
+    cmp/pz  r0
+    bf      delta_b_ready
+    mov     #-1, r0
+delta_b_ready:
     mov     r0, r6
     mov     r6, r5
     mov.l   channel_delta_base_b, r4
@@ -433,9 +488,11 @@ channel_delta:
 
 channel_range:
     sts.l   pr, @-r15
+    mov.l   r8, @-r15
     mov.l   channel_current_ptr, r4
     bsr     stv_read_strided_long
     nop
+    mov     r0, r8
     mov     r0, r7
     mov.l   channel_baseline_830, r1
     mov.l   @r1, r1
@@ -445,7 +502,7 @@ channel_range:
     nop
     mov     r0, r6
     add     r7, r0
-    tst     r6, r6
+    cmp/pz  r6
     bt      range_accum_ready
     cmp/pz  r0
     bf      range_accum_ready
@@ -459,9 +516,9 @@ range_accum_ready:
     mov.l   channel_range_lower, r4
     bsr     stv_read_strided_long
     nop
-    cmp/hs  r7, r0
+    cmp/hs  r8, r0
     bt      range_upper_check
-    mov     r7, r5
+    mov     r8, r5
     mov.l   channel_range_lower, r4
     bsr     stv_write_strided_long
     nop
@@ -471,14 +528,16 @@ range_upper_check:
     nop
     tst     r0, r0
     bt      range_write_upper
-    cmp/hi  r7, r0
+    cmp/hi  r8, r0
     bf      range_tail
 range_write_upper:
-    mov     r7, r5
+    mov     r8, r5
     mov.l   channel_range_upper, r4
     bsr     stv_write_strided_long
     nop
 range_tail:
+    mov     r8, r6
+    mov.l   @r15+, r8
     lds.l   @r15+, pr
     mov.l   channel_tail_ptr, r2
     mov.l   @r2, r2
@@ -488,7 +547,6 @@ range_tail:
     mov     #3, r4
     mov.l   channel_range_upper, r5
     add     #1, r5
-    mov     r7, r6
     shlr8   r6
     shlr8   r6
     shlr8   r6
