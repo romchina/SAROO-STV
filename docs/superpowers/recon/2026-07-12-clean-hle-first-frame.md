@@ -74,3 +74,27 @@ GBR 重定向方案，把 `0x06038704` 当作空闲指针槽写入 `0x00003E4E`�
 ![clean HLE game frame 1200](../../img/stv-clean-hle-game-frame1200.png)
 
 该次运行同样没有 `STV_INVALID`、`LOWEDGE`、`LOWPC` 或新的 unimplemented HLE。
+
+## 3600 帧连续游戏回归
+
+使用相同的 clean HLE 配置继续运行约 478 秒，并在 frame 1800、2400、3600
+分别取帧。三张画面中的棋盘和堆叠状态持续变化，确认模拟器不是停在静态画面，
+而是在连续执行实际游戏逻辑。
+
+![clean HLE game frame 3600](../../img/stv-clean-hle-game-frame3600.png)
+
+本次长跑结果：
+
+- 无 `Master SH2 invalid opcode`；
+- 无 `LOWEDGE` / `LOWPC`，主 SH-2 没有回落执行 ST-V BIOS 低地址代码；
+- 无新的 unimplemented HLE entry 或未知 `0x3842` selector；
+- 自动投币/开始后可进入游戏，并稳定推进到 frame 3600。
+
+复现命令：
+
+```bash
+DISPLAY=:0 \
+STV_AUTOPLAY=1 STV_CLEAN_HLE=1 STV_NOLOW=1 STV_INVALID=1 \
+STV_BIOSCALL=1 STV_HLE_TRACE=1 STV_SHOT=1800,2400,3600 \
+./build/src/gtk/yabause -b bios/saturn-jp-v100.bin --stvboot
+```
