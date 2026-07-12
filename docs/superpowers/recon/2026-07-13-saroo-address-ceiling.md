@@ -70,3 +70,7 @@ image offset `0x13B96CB`。临时 twin 修改在验证后已全部撤销。
 original→native redirect table。Yabause SH-2 interpreter 直接执行上述入口，
 11 项寄存器/内存断言全部通过；自测 harness 随后撤销。运行期 clean-HLE 还剩
 `0x0EFC` vblank update 和 `0x3842` channel-table dispatch 两个复杂入口。
+
+当前第四迭代已提供 `0x04400260` vblank steady-state 和
+`0x04400400` channel dispatch（selector 0/10/1/20）；selector 0 已在 SH-2
+twin 中动态验证，overflow 与 selector 1/20 边界向量仍待补齐。

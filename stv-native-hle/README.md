@@ -27,6 +27,7 @@ Native clean-HLE leaf entries now implemented:
 
 | Original BIOS entry | Native CS1 entry | Service |
 |---:|---:|---|
+| `0x0EFC` | `0x04400260` | vblank fixed-point clock update |
 | `0x0ECC` | `0x04400100` | signed accumulate/saturate |
 | `0x2C64` | `0x04400034` | memmove + SAROO source relocation |
 | `0x2CAC` | `0x04400220` | memset |
@@ -34,10 +35,13 @@ Native clean-HLE leaf entries now implemented:
 | `0x3E4E` | `0x04400120` | packed status test |
 | `0x4596` | `0x04400160` | workspace byte mirror |
 | `0x4680` | `0x044001A0` | cart-layout nibble |
+| `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
 
 The same pairs are emitted as a machine-readable table at `0x04400300`,
-terminated by a zero record. `0x0EFC` vblank update and `0x3842` channel-table
-dispatch remain to be implemented before the runtime service set is complete.
+terminated by a zero record. Selector 0 of `0x3842` has been dynamically
+executed on the SH-2 twin; selector 1/10/20 boundary coverage is pending. The
+vblank routine covers the steady-state path, while its overflow callback branch
+still needs a dedicated vector.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed

@@ -26,7 +26,9 @@ def main() -> int:
         "stv_cart_layout_nibble": 0x044001A0,
         "stv_channel_address": 0x044001E0,
         "stv_memset": 0x04400220,
-        "stv_service_redirect_table": 0x04400300,
+        "stv_vblank_clock_update": 0x04400260,
+        "stv_channel_table_dispatch": 0x04400400,
+        "stv_service_redirect_table": 0x04400700,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -55,6 +57,7 @@ def main() -> int:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 
     redirects = (
+        (0x00000EFC, 0x04400260),
         (0x00000ECC, 0x04400100),
         (0x00002C64, 0x04400034),
         (0x00002CAC, 0x04400220),
@@ -62,13 +65,14 @@ def main() -> int:
         (0x00003E4E, 0x04400120),
         (0x00004596, 0x04400160),
         (0x00004680, 0x044001A0),
+        (0x00003842, 0x04400400),
         (0x00000000, 0x00000000),
     )
     table = b"".join(
         original.to_bytes(4, "big") + native.to_bytes(4, "big")
         for original, native in redirects
     )
-    if raw[0x300:0x300 + len(table)] != table:
+    if raw[0x700:0x700 + len(table)] != table:
         raise SystemExit("service redirect table contents mismatch")
 
     print("verified", len(raw), "bytes", required)

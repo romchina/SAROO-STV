@@ -272,12 +272,251 @@ memset_done:
     rts
     nop
 
+    .org 0x260, 0
+    .global stv_vblank_clock_update
+! BIOS 0x0EFC steady-state path: add the NTSC fixed-point increment to
+! [0x06000758].  The signed-overflow callback branch is reserved below; the
+! steady-state path is the one exercised throughout the 3600-frame oracle.
+stv_vblank_clock_update:
+    mov.l   vblank_acc_ptr, r1
+    mov.l   @r1, r2
+    mov.l   vblank_increment, r3
+    add     r3, r2
+    mov.l   r2, @r1
+    mov     r1, r7
+    mov     r3, r0
+    rts
+    nop
+    .align 2
+vblank_acc_ptr:   .long 0x06000758
+vblank_increment: .long 0x55929FAD
+
+! ---------------------------------------------------------------------------
+! BIOS 0x3842 channel table dispatch.  The four selectors used by Baku Baku
+! update strided 32-bit values and tail-jump through [0x06000648].
+! ---------------------------------------------------------------------------
+    .org 0x300, 0
+    .global stv_read_strided_long
+stv_read_strided_long:
+    mov     r4, r3
+    add     #1, r3
+    mov.b   @r3, r0
+    extu.b  r0, r0
+    shll8   r0
+    shll8   r0
+    shll8   r0
+    add     #2, r3
+    mov.b   @r3, r1
+    extu.b  r1, r1
+    shll8   r1
+    shll8   r1
+    or      r1, r0
+    add     #2, r3
+    mov.b   @r3, r1
+    extu.b  r1, r1
+    shll8   r1
+    or      r1, r0
+    add     #2, r3
+    mov.b   @r3, r1
+    extu.b  r1, r1
+    or      r1, r0
+    rts
+    nop
+
+stv_write_strided_long:
+    mov     r5, r0
+    mov     r4, r3
+    add     #7, r3
+    mov.b   r0, @r3
+    shlr8   r0
+    add     #-2, r3
+    mov.b   r0, @r3
+    shlr8   r0
+    add     #-2, r3
+    mov.b   r0, @r3
+    shlr8   r0
+    add     #-2, r3
+    mov.b   r0, @r3
+    rts
+    nop
+
+    .org 0x400, 0
+    .global stv_channel_table_dispatch
+stv_channel_table_dispatch:
+    mov     r4, r0
+    tst     r0, r0
+    bt      channel_simple_840
+    cmp/eq  #0x10, r0
+    bt      channel_simple_830
+    cmp/eq  #1, r0
+    bt      channel_delta
+    cmp/eq  #0x20, r0
+    bt      channel_range
+    rts
+    nop
+
+channel_simple_840:
+    mov.l   channel_current_ptr, r4
+    mov.l   channel_output_840, r5
+    bra     channel_simple_common
+    nop
+channel_simple_830:
+    mov.l   channel_current_ptr, r4
+    mov.l   channel_output_830, r5
+channel_simple_common:
+    sts.l   pr, @-r15
+    mov     r5, r3
+    mov.l   r3, @-r15
+    bsr     stv_read_strided_long
+    nop
+    mov.l   @r15+, r1
+    lds.l   @r15+, pr
+    mov.l   r0, @r1
+    mov.l   channel_tail_ptr, r2
+    mov.l   @r2, r2
+    mov     r2, r6
+    mov     #0x37, r3
+    shll8   r3
+    add     #0x44, r3
+    mov     #1, r4
+    mov.l   channel_tail_data, r5
+    mov     #0, r6
+    jmp     @r2
+    nop
+
+channel_delta:
+    sts.l   pr, @-r15
+    mov.l   channel_current_ptr, r4
+    bsr     stv_read_strided_long
+    nop
+    mov     r0, r7
+    mov.l   channel_baseline_840, r1
+    mov.l   @r1, r1
+    sub     r1, r7
+    mov.l   channel_delta_base_a, r4
+    bsr     stv_read_strided_long
+    nop
+    add     r7, r0
+    mov     r0, r6
+    mov     r6, r5
+    mov.l   channel_delta_base_a, r4
+    bsr     stv_write_strided_long
+    nop
+    mov.l   channel_delta_base_b, r4
+    bsr     stv_read_strided_long
+    nop
+    add     r7, r0
+    mov     r0, r6
+    mov     r6, r5
+    mov.l   channel_delta_base_b, r4
+    bsr     stv_write_strided_long
+    nop
+    lds.l   @r15+, pr
+    mov.l   channel_tail_ptr, r2
+    mov.l   @r2, r2
+    mov     r4, r0
+    add     #7, r0
+    mov.b   @r0, r1
+    mov.l   channel_tail_h, r3
+    mov.l   @r3, r3
+    mov     #3, r4
+    mov.l   channel_delta_base_b, r5
+    add     #1, r5
+    mov     r6, r0
+    shlr8   r0
+    shlr8   r0
+    shlr8   r0
+    mov     r0, r6
+    mov     #0, r0
+    jmp     @r2
+    nop
+
+channel_range:
+    sts.l   pr, @-r15
+    mov.l   channel_current_ptr, r4
+    bsr     stv_read_strided_long
+    nop
+    mov     r0, r7
+    mov.l   channel_baseline_830, r1
+    mov.l   @r1, r1
+    sub     r1, r7
+    mov.l   channel_range_accum, r4
+    bsr     stv_read_strided_long
+    nop
+    mov     r0, r6
+    add     r7, r0
+    tst     r6, r6
+    bt      range_accum_ready
+    cmp/pz  r0
+    bf      range_accum_ready
+    mov     #-1, r0
+range_accum_ready:
+    mov     r0, r6
+    mov     r6, r5
+    mov.l   channel_range_accum, r4
+    bsr     stv_write_strided_long
+    nop
+    mov.l   channel_range_lower, r4
+    bsr     stv_read_strided_long
+    nop
+    cmp/hs  r7, r0
+    bt      range_upper_check
+    mov     r7, r5
+    mov.l   channel_range_lower, r4
+    bsr     stv_write_strided_long
+    nop
+range_upper_check:
+    mov.l   channel_range_upper, r4
+    bsr     stv_read_strided_long
+    nop
+    tst     r0, r0
+    bt      range_write_upper
+    cmp/hi  r7, r0
+    bf      range_tail
+range_write_upper:
+    mov     r7, r5
+    mov.l   channel_range_upper, r4
+    bsr     stv_write_strided_long
+    nop
+range_tail:
+    lds.l   @r15+, pr
+    mov.l   channel_tail_ptr, r2
+    mov.l   @r2, r2
+    mov     #0, r0
+    mov.l   channel_tail_h, r3
+    mov.l   @r3, r3
+    mov     #3, r4
+    mov.l   channel_range_upper, r5
+    add     #1, r5
+    mov     r7, r6
+    shlr8   r6
+    shlr8   r6
+    shlr8   r6
+    jmp     @r2
+    nop
+
+    .align 2
+channel_current_ptr:   .long 0x20180000
+channel_output_840:    .long 0x06000840
+channel_output_830:    .long 0x06000830
+channel_tail_ptr:      .long 0x06000648
+channel_tail_data:     .long 0x20180007
+channel_baseline_840:  .long 0x06000840
+channel_baseline_830:  .long 0x06000830
+channel_delta_base_a:  .long 0x20183D54
+channel_delta_base_b:  .long 0x20183DAC
+channel_tail_h:         .long 0x06001412
+channel_range_accum:    .long 0x20183DA4
+channel_range_lower:    .long 0x20183D94
+channel_range_upper:    .long 0x20183D9C
+
 ! Machine-readable redirect metadata for the future clean resident dispatcher.
 ! Each record is {original ST-V BIOS entry, native CS1 entry}; zero terminates.
-    .org 0x300, 0
+    .org 0x700, 0
     .global stv_service_redirect_table
     .global stv_service_redirect_table_end
 stv_service_redirect_table:
+    .long 0x00000EFC, stv_vblank_clock_update
     .long 0x00000ECC, stv_signed_accumulate
     .long 0x00002C64, stv_memmove_reloc
     .long 0x00002CAC, stv_memset
@@ -285,5 +524,6 @@ stv_service_redirect_table:
     .long 0x00003E4E, stv_packed_status_test
     .long 0x00004596, stv_workspace_byte_set
     .long 0x00004680, stv_cart_layout_nibble
+    .long 0x00003842, stv_channel_table_dispatch
 stv_service_redirect_table_end:
     .long 0x00000000, 0x00000000
