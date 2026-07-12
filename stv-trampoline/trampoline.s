@@ -80,14 +80,6 @@ alias_entry:
     mov     #0, r0
     mov.w   r0, @r1
 
-    ! Execute the first native-HLE boot hook through CS1.  It installs the
-    ! two Baku source-relocation jump stubs in HWRAM.  The Phase-1 image does
-    ! not enter the game yet, but reaching the magenta screen after this call
-    ! proves CS1 executable fetch and HWRAM patch writes both worked.
-    mov.l   hle_install_ptr, r0
-    jsr     @r0
-    nop
-
     ! SR = 0xF0 : block all interrupts (IMASK = 0xF)
     mov     #0xF0, r0
     ldc     r0, sr
@@ -96,11 +88,62 @@ alias_entry:
     ! full 32-bit immediates aren't a single-instruction op on SH-2.
     mov.l   stack_top_ptr, r15
 
+    ! The ST-V BIOS normally leaves a 4 KB "SEGA" sentinel page at
+    ! 0x0600F000, then copies FPR byte 0x1000 through the top of HWRAM.
+    ! Materialize that exact clean-boot layout without depending on a
+    ! proprietary resident/BIOS dump.
+    mov.l   game_page_ptr, r1
+    mov.l   sega_word_ptr, r2
+    mov.l   sega_long_count_ptr, r3
+fill_sega_page:
+    mov.l   r2, @r1
+    add     #4, r1
+    dt      r3
+    bf      fill_sega_page
+
+    ! Native CS1 long-copy service: r4=dst, r5=src, r6=long count.
+    ! 0x3C000 longs = 0xF0000 bytes, ending exactly at 0x060FFFFF.
+    mov.l   game_dst_ptr, r4
+    mov.l   game_src_ptr, r5
+    mov.l   game_long_count_ptr, r6
+call_long_copy:
+    mov.l   hle_long_copy_ptr, r0
+    jsr     @r0
+    nop
+
+    ! Install relocation veneers only after the game copy, otherwise the
+    ! copied FPR body would overwrite them.
+call_install:
+    mov.l   hle_install_ptr, r0
+    jsr     @r0
+    nop
+
+    ! Verify the first copied instruction against fpr17969.13 offset 0x1000.
+    ! A mismatch gets a distinct heartbeat and red screen; success remains
+    ! the established magenta diagnostic.
+verify_game_copy:
+    mov.l   game_dst_ptr, r1
+    mov.l   @r1, r0
+    mov.l   game_first_word_ptr, r2
+    cmp/eq  r2, r0
+    bf      copy_failed
+
     ! WRAM heartbeat: write 0x5AA5A55A at 0x06000000 so save-state
     ! inspection proves "we got here".
     mov.l   wram_base_ptr,     r1
     mov.l   heartbeat_val_ptr, r2
     mov.l   r2, @r1
+    mov.w   magenta_val, r4
+    bra     show_status
+    nop
+
+copy_failed:
+    mov.l   wram_base_ptr, r1
+    mov.l   failure_val_ptr, r2
+    mov.l   r2, @r1
+    mov.w   red_val, r4
+
+show_status:
 
     ! ---- VDP2: display on, back screen = magenta ----
     !
@@ -126,8 +169,7 @@ alias_entry:
     mov.w   r0, @r3                        ! BKTAL = 0
 
     mov.l   vdp2_vram_ptr,  r3
-    mov.w   magenta_val,    r0
-    mov.w   r0, @r3                        ! *(VRAM+0) = 0xFC1F
+    mov.w   r4, @r3                        ! magenta=success, red=copy failure
 
     ! ---- Halt: infinite NOP loop ----
 halt:
@@ -139,8 +181,17 @@ halt:
 stack_top_ptr:      .long 0x06100000
 wram_base_ptr:      .long 0x06000000
 heartbeat_val_ptr:  .long 0x5AA5A55A
+failure_val_ptr:    .long 0xDEAD1000
 alias_entry_ptr:    .long alias_entry + 0x02F00000
 overlay_ctrl_ptr:   .long 0x2580701C
+game_page_ptr:      .long 0x0600F000
+sega_word_ptr:      .long 0x53454741
+sega_long_count_ptr:.long 0x00000400
+game_dst_ptr:       .long 0x06010000
+game_src_ptr:       .long 0x02201000
+game_long_count_ptr:.long 0x0003C000
+game_first_word_ptr:.long 0x4F22B0C3
+hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
 vdp2_tvmd_ptr:      .long 0x25F80000
 vdp2_bgon_ptr:      .long 0x25F80020
@@ -152,3 +203,4 @@ vdp2_vram_ptr:      .long 0x25E00000
 tvmd_val:           .word 0x8000
 zero_w:             .word 0x0000
 magenta_val:        .word 0xFC1F
+red_val:            .word 0xFC00

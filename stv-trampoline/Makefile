@@ -30,6 +30,7 @@ trampoline.bin: trampoline.elf
 # we just verify the ELF/BIN build succeeds; true CD image assembly comes
 # with Task 7 and/or a separate mkiso step.
 test-build: trampoline.bin
+	python3 verify_build.py trampoline.elf trampoline.bin
 	@ls -l trampoline.bin trampoline.elf
 	@echo
 	@echo "Header dump (first 32 bytes):"

@@ -13,20 +13,30 @@ our code.
 
 The trampoline first jumps to its permanent CS1 alias at `0x04F00000` and
 closes the boot overlay through `0x2580701C`, restoring the original ST-V
-FPR bytes at CS0 offset zero. It then calls the native-HLE installer at
-`0x04400088`; reaching the screen therefore also validates CS1 executable
-fetch and the two HWRAM relocation-stub writes. It then:
+FPR bytes at CS0 offset zero. It then constructs the verified Baku Baku game
+image in HWRAM and only afterwards calls the native-HLE installer at
+`0x04400088`, so the FPR copy cannot overwrite its relocation veneers. It:
 
 1. Masks all SH-2 interrupts (`SR |= 0xF0`).
 2. Drops the stack at the top of High Work RAM (`0x06100000`).
-3. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
+3. Fills `0x0600F000..0x0600FFFF` with the `SEGA` sentinel word.
+4. Uses the native CS1 long-copy service at `0x04400000` to copy
+   `0xF0000` bytes from FPR `0x02201000` to `0x06010000`; the copy ends
+   exactly at the top of HWRAM.
+5. Installs the two relocation veneers and verifies the first copied word
+   is `0x4F22B0C3` (FPR offset `0x1000`).
+6. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
    Mednafen save-state dump even without visible VDP2 output).
-4. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
+7. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
    turn the display on with a bright magenta back-screen.
-5. Halts in a `nop ; bra halt ; nop` loop.
+8. Halts in a `nop ; bra halt ; nop` loop.
 
-No slave SH-2 boot, no SCU init, no interrupt vectors set up — just
-enough for "we got here and the screen is not black."
+If the copy verification fails, the heartbeat is `0xDEAD1000` and the
+back-screen is red instead of magenta.
+
+No slave SH-2 boot, no SCU init, no interrupt vectors set up yet. This stage
+proves the complete cartridge-to-HWRAM game materialization path before the
+clean resident and dispatcher begin executing it.
 
 ## Why pure assembly
 
@@ -115,7 +125,7 @@ installing a real Saturn BIOS or running on real hardware.
 0x0EC  _start           (slave SH-2 SP — unused)
 0x0F0  reserved         (16 bytes of 0)
 0x100  _start           (entry point — SH-2 code)
-0x14C  end
+0x1CC  end (460 bytes total; still well inside the 4 KB overlay)
 ```
 
 ## Known limitations (explicit Phase-1 cut)
