@@ -83,6 +83,10 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   invalid opcode、LOWPC/LOWEDGE 或 unimplemented。
 - [x] clean resident 生成向量、服务 veneer、实测 handoff 栈与工作区初值；
   SAROO 等价 CS0/CS1 twin 冷启动连续运行 60 秒，无 low BIOS、异常或非法指令。
+- [x] 增加一键虚拟验收：packer、MCU host tests、FPGA iverilog、native HLE、
+  诊断/运行 trampoline 可从 Windows 经 WSL 或 Linux 单命令全量重建检查。
+- [x] native exception trap 保存完整 SH-2 上下文到 `0x06000B80`，并提供
+  `tools/stv/decode_crash.py` 离线解析 PC/PR/SR、R0-R14 和控制寄存器。
 - [ ] Quartus/Keil 构建并在现有 SAROO 真机验证 overlay 关闭与 heartbeat。
 
 ## 第一真机验收步骤

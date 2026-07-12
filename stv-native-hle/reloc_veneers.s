@@ -710,6 +710,48 @@ resident_veneer_installer_ptr: .long stv_install_resident_veneers
     .org 0x900, 0
     .global stv_resident_exception
 stv_resident_exception:
+    ! Preserve the complete observable exception context before using any
+    ! scratch register.  On SH-2 the hardware exception frame at the original
+    ! R15 is PC followed by SR.  The resulting 22-long raw record is:
+    ! VBR, GBR, MACL, MACH, PR, R14..R0, PC, SR.
+    mov.l   r0, @-r15
+    mov.l   r1, @-r15
+    mov.l   r2, @-r15
+    mov.l   r3, @-r15
+    mov.l   r4, @-r15
+    mov.l   r5, @-r15
+    mov.l   r6, @-r15
+    mov.l   r7, @-r15
+    mov.l   r8, @-r15
+    mov.l   r9, @-r15
+    mov.l   r10, @-r15
+    mov.l   r11, @-r15
+    mov.l   r12, @-r15
+    mov.l   r13, @-r15
+    mov.l   r14, @-r15
+    sts.l   pr, @-r15
+    sts.l   mach, @-r15
+    sts.l   macl, @-r15
+    stc.l   gbr, @-r15
+    stc.l   vbr, @-r15
+
+    mov.l   resident_exception_diag, r0
+    mov.l   resident_crash_ptr, r1
+    mov.l   r0, @r1
+    add     #4, r1
+    mov     #22, r0
+    mov.l   r0, @r1
+    add     #4, r1
+    mov     r15, r0
+    mov     #22, r2
+resident_exception_copy:
+    mov.l   @r0+, r3
+    mov.l   r3, @r1
+    add     #4, r1
+    dt      r2
+    bf      resident_exception_copy
+
+    ! Keep the original one-word diagnostic for existing probes.
     mov.l   resident_exception_diag, r0
     mov.l   resident_diag_ptr, r1
     mov.l   r0, @r1
@@ -760,6 +802,7 @@ resident_vblank_restore:
 
     .align 2
 resident_diag_ptr:          .long 0x06000BFC
+resident_crash_ptr:         .long 0x06000B80
 resident_exception_diag:    .long 0xDEADE001
 resident_handler_a00_irq:   .long 0x06000A00
 

@@ -73,7 +73,7 @@ def main() -> int:
                   required["stv_memmove_reloc"], 0x06000100,
                   0x06000300, 0x06000304, 0x06000310, 0x06000314,
                   0x06000610, 0x0600063C, 0x06000660,
-                  0x06000A00, 0x06035278):
+                  0x06000A00, 0x06000B80, 0x06035278, 0xDEADE001):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 

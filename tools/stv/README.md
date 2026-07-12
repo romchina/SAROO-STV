@@ -38,3 +38,24 @@ Run the synthetic-data tests with:
 ```text
 python -m unittest discover -s tools/stv/tests -v
 ```
+
+## One-command virtual acceptance
+
+From Windows, run every hardware-independent test through WSL:
+
+```powershell
+.\tools\stv\verify_virtual.ps1
+```
+
+With a directory containing the five canonical, legally obtained ROM dumps,
+the same command also rebuilds and verifies both 32 MB hardware candidates:
+
+```powershell
+.\tools\stv\verify_virtual.ps1 -RomDirectory C:\path\to\bakubaku-roms `
+  -OutputDirectory C:\path\to\output
+```
+
+On Linux/WSL, invoke `bash tools/stv/verify_virtual.sh` directly and pass
+`--rom-dir` / `--output-dir` when canonical image generation is wanted.  A
+run without ROM data still checks the packer with synthetic fixtures, the MCU
+loader, FPGA mapping, native HLE layout, and both trampoline variants.

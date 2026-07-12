@@ -72,6 +72,15 @@ initializer after copying the game and installing relocation veneers, then
 loads `VBR=0x06000000` and `GBR=0xFFFFFE00`. Interrupts remain masked during
 this diagnostic stage.
 
+The exception handler writes a versioned crash record at `0x06000B80` before
+halting.  It contains VBR, GBR, MACL, MACH, PR, R0-R14, and the exception-frame
+PC/SR; the legacy `0xDEADE001` marker at `0x06000BFC` remains available. Decode
+a binary HWRAM dump with:
+
+```text
+python tools/stv/decode_crash.py hwram.bin
+```
+
 `stv_bootstrap_handoff` reproduces the measured non-returning `0x4114`
 transition: it builds the 32-byte frame at `0x060FFFDC`, restores the observed
 register state (`GBR=0x060D28C8`, `R4=0x120`, `R5=0x20180108`,

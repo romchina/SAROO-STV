@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pack_bakubaku as pack
+import verify_saroo_image as verify_image
 
 
 class PackBakuBakuTests(unittest.TestCase):
@@ -87,6 +89,31 @@ class PackBakuBakuTests(unittest.TestCase):
     def test_noncanonical_hash_is_rejected_by_default(self):
         with self.assertRaisesRegex(ValueError, "SHA-1"):
             pack.build_image(self.directory)
+
+    def test_packed_hardware_image_verifier(self):
+        overlay = b"SEGA SEGASATURN " + bytes(range(64))
+        hle = bytes((i * 29) & 0xFF for i in range(192))
+        image, manifest = pack.build_image(
+            self.directory, verify_hashes=False,
+            boot_overlay=overlay, native_hle=hle)
+        image_path = self.directory / "candidate.bin"
+        manifest_path = self.directory / "candidate.bin.json"
+        overlay_path = self.directory / "trampoline.bin"
+        hle_path = self.directory / "native-hle.bin"
+        image_path.write_bytes(image)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        overlay_path.write_bytes(overlay)
+        hle_path.write_bytes(hle)
+
+        result = verify_image.verify(
+            image_path, manifest_path, overlay_path, hle_path)
+        self.assertEqual(result["image_sha1"], hashlib.sha1(image).hexdigest())
+
+        manifest["image_sha1"] = "0" * 40
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "image SHA-1"):
+            verify_image.verify(
+                image_path, manifest_path, overlay_path, hle_path)
 
 
 if __name__ == "__main__":
