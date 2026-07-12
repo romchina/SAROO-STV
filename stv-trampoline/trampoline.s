@@ -7,8 +7,9 @@
 !     then halts master SH-2 in an NOP loop.
 !
 ! Assembled with sh-elf-as -little=no (big-endian, SH-2). The binary
-! drops straight onto SAROO SDRAM at the CS0 base; Saturn IPL parses
-! the header, validates the magic, and jumps via the First Master PC.
+! is embedded at image offset 31 MB. FPGA boot overlay presents it at
+! CS0 base until this code jumps to its permanent CS1 alias and closes
+! the overlay, restoring the real ST-V FPR at CS0 offset zero.
 !
 ! For Phase 1 validation this is enough to prove the end-to-end path:
 ! FPGA CS0 ROM mapping -> Saturn IPL header check -> our code runs.
@@ -50,8 +51,7 @@ _boot_header:
     ! 0xF0..0xFF: reserved
     .space  16, 0
 
-    ! Pad to 256 bytes header size so _start lands at a known offset.
-    .space  0x100 - (. - _boot_header), 0
+    ! Fields above total exactly 256 bytes, so _start lands at 0x100.
 
 ! ------------------------------------------------------------------
 ! Master SH-2 entry point.
@@ -68,6 +68,18 @@ _boot_header:
     .align 2
     .global _start
 _start:
+    ! The boot overlay currently aliases image offset 31 MB onto CS0 low
+    ! 4 KB.  Move execution to the permanent CS1 alias (0x04F00000),
+    ! then close the alias through SAROO's CS2 register at 0x2580701C.
+    mov.l   alias_entry_ptr, r0
+    jmp     @r0
+    nop
+
+alias_entry:
+    mov.l   overlay_ctrl_ptr, r1
+    mov     #0, r0
+    mov.w   r0, @r1
+
     ! SR = 0xF0 : block all interrupts (IMASK = 0xF)
     mov     #0xF0, r0
     ldc     r0, sr
@@ -119,6 +131,8 @@ halt:
 stack_top_ptr:      .long 0x06100000
 wram_base_ptr:      .long 0x06000000
 heartbeat_val_ptr:  .long 0x5AA5A55A
+alias_entry_ptr:    .long alias_entry + 0x02F00000
+overlay_ctrl_ptr:   .long 0x2580701C
 vdp2_tvmd_ptr:      .long 0x25F80000
 vdp2_bgon_ptr:      .long 0x25F80020
 vdp2_bktau_ptr:     .long 0x25F800AC

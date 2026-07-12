@@ -27,12 +27,13 @@
 #define STV_ROM_IMAGE_MAX      (32u * 1024u * 1024u)  /* Phase 1: one CS0 image */
 
 /* FPGA register map offsets (STM32 FSMC addr bits [7:0] with addr[24]=0) */
-#define FPGA_REG_CTRL          0x04   /* ss_reg_ctrl  — bits [13:12] = ss_cs0_type */
+#define FPGA_REG_CTRL          0x04   /* st_reg_ctrl — MCU-side FPGA control       */
 #define FPGA_REG_ROM_BASE      0x30   /* ss_rom_base  — 1 MB units                */
 #define FPGA_REG_SDRAM_BANK    0x32   /* STM32 SDRAM aperture, 16 MB units        */
+#define FPGA_REG_BOOT_OVERLAY   0x34   /* CS0 low 4 KB -> image offset 31 MB      */
 
-#define SS_CS0_TYPE_ROM        (0u << 12)   /* 2'b00 in ss_reg_ctrl[13:12] */
-#define SS_CS0_TYPE_DATA_CART  (1u << 12)
+#define ST_CTRL_STV_CS1        (1u << 10)   /* CS1 maps image bytes 16 MB+ */
+#define ST_CTRL_STV_ROM        (1u << 11)   /* force CS0/CS1 read-only ROM */
 
 static void fpga_reg_write(uint32_t reg_off, uint16_t val);
 
@@ -48,6 +49,7 @@ uint8_t  g_mock_sdram[STV_ROM_SDRAM_MAX];
 uint16_t g_mock_fpga_ctrl;
 uint16_t g_mock_fpga_rom_base;
 uint16_t g_mock_fpga_sdram_bank;
+uint16_t g_mock_fpga_boot_overlay;
 size_t   g_mock_sdram_fail_at = SIZE_MAX;
 unsigned g_mock_sdram_write_count;
 
@@ -93,6 +95,7 @@ static void fpga_reg_write(uint32_t reg_off, uint16_t val)
     case FPGA_REG_CTRL:     g_mock_fpga_ctrl     = val; break;
     case FPGA_REG_ROM_BASE: g_mock_fpga_rom_base = val; break;
     case FPGA_REG_SDRAM_BANK: g_mock_fpga_sdram_bank = val; break;
+    case FPGA_REG_BOOT_OVERLAY: g_mock_fpga_boot_overlay = val; break;
     default: /* ignore */ break;
     }
 }
@@ -103,6 +106,7 @@ static uint16_t fpga_reg_read(uint32_t reg_off)
     case FPGA_REG_CTRL:     return g_mock_fpga_ctrl;
     case FPGA_REG_ROM_BASE: return g_mock_fpga_rom_base;
     case FPGA_REG_SDRAM_BANK: return g_mock_fpga_sdram_bank;
+    case FPGA_REG_BOOT_OVERLAY: return g_mock_fpga_boot_overlay;
     default: return 0;
     }
 }
@@ -187,6 +191,8 @@ int stv_rom_load(const char *path, stv_rom_info_t *out)
     stv_file_t file;
     uint32_t file_size;
     uint32_t offset = 0;
+    int has_boot_overlay = 0;
+    static const uint8_t saturn_magic[16] = "SEGA SEGASATURN ";
 
     if(!path || !out) return -1;
     memset(out, 0, sizeof(*out));
@@ -208,6 +214,10 @@ int stv_rom_load(const char *path, stv_rom_info_t *out)
             file_close(&file);
             return -1;
         }
+        if(offset <= 0x01F00000u && offset + got >= 0x01F00010u &&
+           memcmp(s_stage_buf + (0x01F00000u - offset), saturn_magic,
+                  sizeof(saturn_magic)) == 0)
+            has_boot_overlay = 1;
         if(sdram_write(STV_ROM_SDRAM_OFFSET + offset,
                        s_stage_buf, got) != 0) {
             file_close(&file);
@@ -217,11 +227,16 @@ int stv_rom_load(const char *path, stv_rom_info_t *out)
     }
     file_close(&file);
 
-    /* Configure FPGA: ss_cs0_type = 00 (ROM mode), ss_rom_base = offset / 1 MB. */
+    /* Configure the MCU-owned ST-V ROM mode and SDRAM base. */
     uint16_t base_mb = (uint16_t)(STV_ROM_SDRAM_OFFSET / (1024u * 1024u));
     uint16_t ctrl = fpga_reg_read(FPGA_REG_CTRL);
-    ctrl = (uint16_t)((ctrl & ~(3u << 12)) | SS_CS0_TYPE_ROM | 0x0100u);
+    ctrl |= ST_CTRL_STV_ROM;
+    if(file_size > 0x01000000u)
+        ctrl |= ST_CTRL_STV_CS1;
+    else
+        ctrl &= (uint16_t)~ST_CTRL_STV_CS1;
     fpga_reg_write(FPGA_REG_ROM_BASE, base_mb);
+    fpga_reg_write(FPGA_REG_BOOT_OVERLAY, (uint16_t)has_boot_overlay);
     fpga_reg_write(FPGA_REG_CTRL, ctrl);
 
     out->sdram_base  = STV_ROM_SDRAM_OFFSET;
@@ -235,10 +250,9 @@ void stv_rom_unload(void)
     uint16_t ctrl = fpga_reg_read(FPGA_REG_CTRL);
     fpga_reg_write(FPGA_REG_ROM_BASE, 0);
     fpga_reg_write(FPGA_REG_SDRAM_BANK, 0);
-    /* Return to the SAROO default (bit 8 set, CS0 type = 00 Bootrom
-     * — same encoding as ROM mode, but downstream code treats a zero
-     * base as "no ST-V image loaded"). */
-    ctrl = (uint16_t)((ctrl & ~(3u << 12)) | 0x0100u);
+    fpga_reg_write(FPGA_REG_BOOT_OVERLAY, 0);
+    /* Return to normal SAROO control without disturbing FIFO/IRQ bits. */
+    ctrl &= (uint16_t)~(ST_CTRL_STV_ROM | ST_CTRL_STV_CS1);
     fpga_reg_write(FPGA_REG_CTRL, ctrl);
 }
 

@@ -21,6 +21,7 @@ extern uint8_t  g_mock_sdram[];
 extern uint16_t g_mock_fpga_ctrl;
 extern uint16_t g_mock_fpga_rom_base;
 extern uint16_t g_mock_fpga_sdram_bank;
+extern uint16_t g_mock_fpga_boot_overlay;
 extern size_t   g_mock_sdram_fail_at;
 extern unsigned g_mock_sdram_write_count;
 
@@ -30,6 +31,7 @@ static void reset_mocks(void)
     g_mock_fpga_ctrl = 0;
     g_mock_fpga_rom_base = 0;
     g_mock_fpga_sdram_bank = 0;
+    g_mock_fpga_boot_overlay = 0;
     g_mock_sdram_fail_at = SIZE_MAX;
     g_mock_sdram_write_count = 0;
 }
@@ -95,12 +97,9 @@ static void test_small_rom_load(void)
     ASSERT_MEM_EQ("small payload in SDRAM",
                   g_mock_sdram + info.sdram_base, magic, sizeof(magic));
 
-    /* FPGA regs: base=4, ctrl has ROM type (bits 13:12 = 00) + 0x0100. */
+    /* FPGA regs: base=4, MCU-owned ST-V ROM mode bit set. */
     ASSERT_EQ_U16("small fpga rom_base", g_mock_fpga_rom_base, 4);
-    ASSERT_EQ_U16("small fpga ctrl",     g_mock_fpga_ctrl,     0x0100);
-    /* ss_cs0_type is bits [13:12] — explicitly check. */
-    ASSERT_EQ_U16("small fpga ctrl[13:12]=00",
-                  (uint16_t)((g_mock_fpga_ctrl >> 12) & 0x3), 0);
+    ASSERT_EQ_U16("small fpga ctrl",     g_mock_fpga_ctrl, ST_CTRL_STV_ROM);
 }
 
 static void test_multi_chunk_rom_load(void)
@@ -126,7 +125,7 @@ static void test_multi_chunk_rom_load(void)
     ASSERT_MEM_EQ("multi payload", g_mock_sdram + info.sdram_base,
                   payload, size);
     ASSERT_EQ_U16("multi ctrl preserves unrelated bits", g_mock_fpga_ctrl,
-                  (uint16_t)((0xF055u & ~0x3000u) | 0x0100u));
+                  (uint16_t)(0xF055u | ST_CTRL_STV_ROM));
 
     free(payload);
     remove(path);
@@ -187,7 +186,7 @@ static void test_load_crosses_16mb_aperture_bank(void)
     reset_mocks();
 
     const char *path = "/tmp/saroo_stv_test_bank_crossing.bin";
-    const size_t size = (12u * 1024u * 1024u) + STAGE_BUF_BYTES;
+    const size_t size = (16u * 1024u * 1024u) + STAGE_BUF_BYTES;
     FILE *f = fopen(path, "wb");
     assert(f);
     assert(fseek(f, (long)size - 1, SEEK_SET) == 0);
@@ -200,6 +199,9 @@ static void test_load_crosses_16mb_aperture_bank(void)
     ASSERT_EQ_U32("bank crossing size", info.size, size);
     ASSERT_EQ_U16("bank crossing selects bank 1",
                   g_mock_fpga_sdram_bank, 1);
+    ASSERT_EQ_U16("bank crossing enables ST-V CS1 window",
+                  (uint16_t)(g_mock_fpga_ctrl & ST_CTRL_STV_CS1),
+                  ST_CTRL_STV_CS1);
     ASSERT_EQ_U32("bank crossing last byte",
                   g_mock_sdram[STV_ROM_SDRAM_OFFSET + size - 1], 0xC7);
     remove(path);
@@ -222,9 +224,31 @@ static void test_stv_rom_unload_resets_regs(void)
 
     stv_rom_unload();
     ASSERT_EQ_U16("post-unload rom_base", g_mock_fpga_rom_base, 0);
+    ASSERT_EQ_U16("post-unload boot overlay", g_mock_fpga_boot_overlay, 0);
     ASSERT_EQ_U16("post-unload ctrl preserves unrelated bits",
                   g_mock_fpga_ctrl,
-                  (uint16_t)((0xC055u & ~0x3000u) | 0x0100u));
+                  (uint16_t)(0xC055u & ~(ST_CTRL_STV_ROM | ST_CTRL_STV_CS1)));
+}
+
+static void test_embedded_boot_overlay_is_detected(void)
+{
+    printf("\n== test_embedded_boot_overlay_is_detected ==\n");
+    reset_mocks();
+
+    const char *path = "/tmp/saroo_stv_test_overlay.bin";
+    FILE *f = fopen(path, "wb");
+    assert(f);
+    assert(fseek(f, 0x01F00000, SEEK_SET) == 0);
+    assert(fwrite("SEGA SEGASATURN ", 1, 16, f) == 16);
+    fclose(f);
+
+    stv_rom_info_t info;
+    int rc = stv_rom_load(path, &info);
+    ASSERT_EQ_U32("overlay load rc", rc, 0);
+    ASSERT_EQ_U16("overlay enabled", g_mock_fpga_boot_overlay, 1);
+    ASSERT_EQ_U16("overlay image enables CS1", g_mock_fpga_ctrl & ST_CTRL_STV_CS1,
+                  ST_CTRL_STV_CS1);
+    remove(path);
 }
 
 int main(void)
@@ -235,6 +259,7 @@ int main(void)
     test_oversize_rom_rejected();
     test_sdram_failure_stops_load();
     test_load_crosses_16mb_aperture_bank();
+    test_embedded_boot_overlay_is_detected();
 
     if(fails) {
         printf("\n%d FAILURES\n", fails);

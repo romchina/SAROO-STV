@@ -219,6 +219,12 @@ module SSMaster(
 
 	wire st_fifo_dir   = st_reg_ctrl[9];
 	wire st_fifo_reset = st_reg_ctrl[8];
+	// SAROO-STV: the PCB routes only Saturn AA0..AA23 to the FPGA, so
+	// the upper half of the 32 MB CS0 range cannot be distinguished from
+	// the lower half.  In ST-V mode expose that upper image window through
+	// CS1 instead.  This bit is written only by the MCU ST-V loader.
+	wire st_stv_cs1_enable = st_reg_ctrl[10];
+	wire st_stv_rom_enable = st_reg_ctrl[11];
 	wire st_fifo_write = (st_wr_start==1 && fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h08);
 	wire st_fifo_read  = (st_rd_start==1 && fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h08);
 
@@ -229,6 +235,7 @@ module SSMaster(
 			st_reg_spi <= 3'b111;
 			ss_rom_base <= 16'h0000;
 			st_sdram_bank <= 2'b00;
+			st_boot_overlay <= 1'b0;
 		end else if(st_wr_start==1) begin
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h04) st_reg_ctrl <= ST_AD;
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h16) st_reg_spi <= ST_AD[3:1];
@@ -240,6 +247,11 @@ module SSMaster(
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h30) ss_rom_base <= ST_AD;
 			// STM32 raw SDRAM aperture bank, 16 MB per unit
 			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h32) st_sdram_bank <= ST_AD[1:0];
+			// Boot overlay enable. Saturn clears it through register 0x1c.
+			if(fsmc_addr[24]==0 && fsmc_addr[7:0]==8'h34) st_boot_overlay <= ST_AD[0];
+		end else if(ss_wr_start==1 && ss_reg_cs==1 &&
+				SS_ADDR[5:2]==4'b01_11) begin
+			st_boot_overlay <= 1'b0;
 		end
 	end
 
@@ -247,6 +259,7 @@ module SSMaster(
 	// In CS0 ROM mode, ss_ram_addr = SS_ADDR + (ss_rom_base * 1 MB).
 	reg[15:0] ss_rom_base;
 	reg[1:0] st_sdram_bank;
+	reg st_boot_overlay;
 
 
 
@@ -404,6 +417,7 @@ module SSMaster(
 						(fsmc_addr[7:0]==8'h2a)? ss_hirq_mask :
 						(fsmc_addr[7:0]==8'h30)? ss_rom_base :
 						(fsmc_addr[7:0]==8'h32)? {14'b0, st_sdram_bank} :
+						(fsmc_addr[7:0]==8'h34)? {15'b0, st_boot_overlay} :
 
 						16'hffff;
 	end
@@ -471,6 +485,7 @@ module SSMaster(
 
 	assign SS_DATA =
 					(SS_RD==0 && SS_CS0==0)? ss_ram_data_out :
+					(SS_RD==0 && SS_CS1==0 && st_stv_cs1_enable==1)? ss_ram_data_out :
 					(SS_RD==0 && SS_CS1==0)? ss_cs1_data_out :
 					(SS_RD==0 && ss_reg_cs==1)? ss_bcr_data_out :
 					(SS_RD==0 && ss_cdc_cs==1)? ss_cdc_data_out :
@@ -677,12 +692,15 @@ module SSMaster(
 	// 02800000 - 03000000 :  8MB Free Space
 	// 03000000 - 04000000 : 16MB Free Space
 	// Saturn is BigEndian system
-	wire ss_ram_cs = ~SS_CS0;
+	// Normal SAROO operation keeps the legacy CS0-only behavior.  ST-V
+	// mode additionally maps CS1 so software can relocate accesses that
+	// originally required the physically-unwired Saturn AA24 signal.
+	wire ss_ram_cs = (~SS_CS0) | (st_stv_cs1_enable & ~SS_CS1);
 	//wire[25:0] ss_ram_addr = {2'b0, SS_ADDR};
 	// SAROO-STV: in CS0 ROM mode (ss_cs0_type==00), force byte-mask to
 	// 2'b11 so cacheblk.v and tsdram.v treat every write as "no byte
 	// enabled" — protecting the ROM image from Saturn-side overwrites.
-	wire ss_rom_mode = (ss_cs0_type == 2'b00);
+	wire ss_rom_mode = st_stv_rom_enable | (ss_cs0_type == 2'b00);
 	wire[ 1:0] ss_mask = ss_rom_mode ? 2'b11 : {SS_WR0,SS_WR1};
 	wire[15:0] ss_ram_din = {SS_DATA[7:0], SS_DATA[15:8]};
 	wire[15:0] ss_ram_dout;
@@ -693,13 +711,22 @@ module SSMaster(
 	// SAROO-STV ROM-mode offset: ss_rom_base * 1 MB, clamped to 26 bits.
 	wire[25:0] ss_rom_offset = {ss_rom_base[5:0], 20'b0};
 	wire[25:0] ss_addr_ext   = {2'b0, SS_ADDR};
+	wire[25:0] ss_stv_addr_ext =
+		(st_stv_cs1_enable && SS_CS1==0) ?
+			{2'b01, SS_ADDR} : ss_addr_ext;
+	wire ss_boot_overlay_hit = st_boot_overlay && SS_CS0==0 &&
+		(SS_ADDR[23:12] == 12'h000);
+	// The overlay lives at image offset 31 MB.  The same bytes remain
+	// executable through CS1 at 0x04f00000 after this alias is closed.
+	wire[25:0] ss_rom_window_addr = ss_boot_overlay_hit ?
+		({2'b0, SS_ADDR} + 26'h1f00000) : ss_stv_addr_ext;
 
 	reg[25:0] ss_ram_addr;
 	always @(posedge mclk)
 	begin
 		if(ss_rom_mode) begin
 			// ROM mode: place ROM image anywhere in SDRAM via ss_rom_base.
-			ss_ram_addr <= ss_addr_ext + ss_rom_offset;
+			ss_ram_addr <= ss_rom_window_addr + ss_rom_offset;
 		end else begin
 			// Legacy RAM-cart mapping.
 			ss_ram_addr[25:24] <= 2'b0;

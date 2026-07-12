@@ -4,13 +4,16 @@ Minimal Saturn cart-boot stub for SAROO-STV Phase 1.
 
 ## What this is
 
-A ~330-byte binary that sits at the CS0 base (`0x02000000`) on the
-cartridge A-Bus. Saturn's IPL scans the cart slot on power-up; if it
+A small binary embedded at cart-image offset 31 MB. FPGA boot overlay
+temporarily presents it at CS0 base (`0x02000000`) on the cartridge A-Bus.
+Saturn's IPL scans the cart slot on power-up; if it
 finds the magic `SEGA SEGASATURN ` at byte 0 followed by a valid
 header, it jumps to the First-Master-PC pointer and starts executing
 our code.
 
-The trampoline:
+The trampoline first jumps to its permanent CS1 alias at `0x04F00000` and
+closes the boot overlay through `0x2580701C`, restoring the original ST-V
+FPR bytes at CS0 offset zero. It then:
 
 1. Masks all SH-2 interrupts (`SR |= 0xF0`).
 2. Drops the stack at the top of High Work RAM (`0x06100000`).

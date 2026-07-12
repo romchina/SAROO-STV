@@ -203,6 +203,68 @@ module tb_cs0_rom;
         release dut.fsmc_addr;
         repeat(4) @(posedge CLK_50M);
 
+        // Current SAROO PCBs do not route Saturn AA24.  ST-V mode uses
+        // CS1 as the image's 16 MB+ window instead.  Verify that this is
+        // opt-in and that the translated SDRAM byte address is contiguous
+        // with CS0 at the configured ROM base.
+        force dut.ss_rom_base = 16'h0004;
+        force dut.st_reg_ctrl = 16'h0400;
+        SS_ADDR = 24'h001234;
+        SS_CS1 = 1'b0;
+        repeat(4) @(posedge CLK_50M);
+        if(dut.ss_ram_cs !== 1'b1) begin
+            $display("[TB] FAIL ST-V CS1 does not select SDRAM");
+            fail_count = fail_count + 1;
+        end else if(dut.ss_ram_addr !== 26'h1401234) begin
+            $display("[TB] FAIL ST-V CS1 addr: got 0x%07x expected 0x1401234",
+                     dut.ss_ram_addr);
+            fail_count = fail_count + 1;
+        end else begin
+            $display("[TB] PASS ST-V CS1 addr=0x%07x", dut.ss_ram_addr);
+        end
+        SS_CS1 = 1'b1;
+        release dut.st_reg_ctrl;
+        force dut.ss_rom_base = 16'h0000;
+        repeat(4) @(posedge CLK_50M);
+
+        // Boot overlay aliases CS0 low 4 KB to image offset 31 MB.
+        force dut.ss_rom_base = 16'h0004;
+        force dut.st_boot_overlay = 1'b1;
+        SS_ADDR = 24'h000100;
+        SS_CS0 = 1'b0;
+        repeat(4) @(posedge CLK_50M);
+        if(dut.ss_ram_addr !== 26'h2300100) begin
+            $display("[TB] FAIL boot overlay addr: got 0x%07x expected 0x2300100",
+                     dut.ss_ram_addr);
+            fail_count = fail_count + 1;
+        end else begin
+            $display("[TB] PASS boot overlay addr=0x%07x", dut.ss_ram_addr);
+        end
+        SS_CS0 = 1'b1;
+        release dut.st_boot_overlay;
+        // The trampoline closes the overlay by writing the unused SAROO
+        // system-control slot at Saturn address 0x2580701c (CS2).
+        @(posedge CLK_50M);
+        SS_ADDR = 24'h00701c;
+        ss_data_drv = 16'h0000;
+        SS_CS2 = 1'b0;
+        SS_WR0 = 1'b0;
+        SS_WR1 = 1'b0;
+        repeat(12) @(posedge CLK_50M);
+        SS_CS2 = 1'b1;
+        SS_WR0 = 1'b1;
+        SS_WR1 = 1'b1;
+        ss_data_drv = 16'hzzzz;
+        repeat(8) @(posedge CLK_50M);
+        if(dut.st_boot_overlay !== 1'b0) begin
+            $display("[TB] FAIL Saturn overlay-close latch stayed enabled");
+            fail_count = fail_count + 1;
+        end else begin
+            $display("[TB] PASS Saturn overlay-close latch");
+        end
+        force dut.ss_rom_base = 16'h0000;
+        repeat(4) @(posedge CLK_50M);
+
         // SS_ADDR is byte-addressed (ss_ram_addr[0] is byte-in-word,
         // cachebus uses addr[2:1] to pick word-in-line).
         // Word 0 = byte 0x00: "SE"=0x5345

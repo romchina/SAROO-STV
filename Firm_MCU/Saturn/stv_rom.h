@@ -4,7 +4,9 @@
  * Streams a ROM image (up to one 32 MB CS0 image) from SD in 64 KB chunks,
  * writes it into the SDRAM region reserved
  * for Phase 1+ ST-V use, configures the FPGA's CS0 ROM mode (sets
- * ss_cs0_type=00 via st_reg_ctrl and ss_rom_base via reg 0x30), then
+ * ST-V ROM mode via MCU control bit 11, ss_rom_base via reg 0x30, and maps
+ * image bytes 16 MB+ through CS1 when
+ * needed because current SAROO PCBs do not route Saturn AA24), then
  * returns an info struct the Saturn-side boot path can inspect.
  *
  * Unit tests live in Firm_MCU/tests/; they compile against stv_rom.c

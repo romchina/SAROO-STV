@@ -1,0 +1,41 @@
+# SAROO A-Bus 地址上限与 Baku Baku 重定位边界
+
+**日期：** 2026-07-13
+
+## 硬件结论
+
+Saturn 卡槽提供 AA0-AA25，CS0 逻辑范围是 `0x02000000-0x03ffffff`。
+SAROO v1.x 原理图中，FPGA 只连接 AA0-AA23；AA24、AA25 到达卡槽连接器，
+但没有经过电平转换器进入 FPGA。因此，现有 PCB 在同一个片选内只能区分
+16 MB，无法仅靠 RTL 直接实现原生 32 MB CS0。
+
+这也确认 `SSMaster.v` 把 `SS_ADDR[23:0]` 当作字节地址是正确的；把它整体
+左移会破坏现有 cache/SDRAM 的字地址与字节选择逻辑，不能补回缺失的 AA24。
+
+## 现有 PCB 的映射方案
+
+- CS0 `0x02000000-0x02ffffff` → image offset `0x0000000-0x0ffffff`。
+- CS1 `0x04000000-0x04ffffff` → image offset `0x1000000-0x1ffffff`。
+- MCU `st_reg_ctrl[11]` 明确启用只读 ST-V ROM 模式；`st_reg_ctrl[10]`
+  只在大于 16 MB 的 ST-V image 上启用 CS1 SDRAM 窗口；
+  普通 SAROO 路径保持原行为。
+- boot overlay 把 CS0 低 4 KB 临时映射到 image offset `0x1f00000`。
+  trampoline 跳至永久 CS1 alias `0x04f00000` 后，写 `0x2580701c` 关闭
+  overlay，CS0 低地址随即恢复真实 FPR。
+
+## Baku Baku 上半区访问枚举
+
+在 Yabause clean-HLE twin 的 CS0 read handler 上临时记录
+`0x03000000-0x033fffff`，连续运行 70 秒（覆盖约 3600 帧时间），唯一命中：
+
+| 执行 PC | 返回地址 PR | 访问 | 含义 |
+|---|---|---|---|
+| `0x0604afde` | `0x06035314` | long `0x033f4724` | long-copy，入口 `0x0604afd4`，源指针 R5 |
+| `0x06053cd2` | `0x0604553e` | byte `0x033b96cb` | memmove，入口 `0x06053c98`，源来自资源描述符 |
+
+两个命中都是通用复制例程内部的源读取。native HLE 的硬件移植版应给这两个
+入口安装 veneer：当源地址位于 `0x03000000-0x033fffff` 时加
+`0x01000000`，再执行原复制语义。这样只重定位真实访问，不对 FPR/MPR 数据中
+大量偶然形似 `0x03xxxxxx` 的字节做危险的全局替换。
+
+临时 Yabause 埋点在枚举后已撤销。
