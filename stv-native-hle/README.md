@@ -39,6 +39,7 @@ Native clean-HLE leaf entries now implemented:
 | `0x3842` | `0x04400400` | channel dispatch (selectors 0/10/1/20) |
 | `0x4114` | `0x04400A00` | non-returning bootstrap game handoff |
 | `0x426C` | `0x04400A40` | Baku handler/system transition fast path |
+| `0x34C4` | `0x04400F00` | game-visible video shutdown fast path |
 
 The same pairs are emitted as a machine-readable table at `0x04400700`,
 terminated by a zero record. Selectors `0/0x10/1/0x20` of `0x3842` have been
@@ -95,6 +96,16 @@ HWRAM entry observed during the game-to-resident edge trace:
 The close-packed `0xC00/0xC0A` pair uses six-byte PC-relative jump veneers;
 the other entries use the standard 12-byte absolute form. Interrupt-only
 edges at `0x06001Fxx/0x06002030` are replaced by native VBR handlers.
+
+The direct `0x34C4` oracle showed three calls. Two are internal BIOS boot
+passes superseded by the clean trampoline. The sole game-returning call is a
+steady-state display shutdown with no HWRAM changes; `stv_video_shutdown_fast`
+implements that observable contract and returns the native exception handler.
+
+The only observed `0x4500` descriptor reconstructs FPR `+0x1000` at
+`0x06010000` from the interleaved `0x02002000` view. The trampoline
+pre-materializes that shifted body from the plain mirror, so this boot-only
+transfer is deliberately bypassed.
 
 Validation completed against the Yabause twin with CS0 deliberately limited to
 16 MB and CS1 mapped like the current FPGA implementation. The SH-2 executed

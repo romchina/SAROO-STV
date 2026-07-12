@@ -44,6 +44,7 @@ def main() -> int:
         "stv_resident_copy_128": 0x04400CC0,
         "stv_resident_copy_20": 0x04400D00,
         "stv_install_resident_veneers": 0x04400E00,
+        "stv_video_shutdown_fast": 0x04400F00,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -84,6 +85,7 @@ def main() -> int:
         (0x00003842, 0x04400400),
         (0x00004114, 0x04400A00),
         (0x0000426C, 0x04400A40),
+        (0x000034C4, 0x04400F00),
         (0x00000000, 0x00000000),
     )
     table = b"".join(

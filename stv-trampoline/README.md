@@ -19,19 +19,19 @@ image in HWRAM and only afterwards calls the native-HLE installer at
 
 1. Masks all SH-2 interrupts (`SR |= 0xF0`).
 2. Drops the stack at the top of High Work RAM (`0x06100000`).
-3. Uses the native CS1 long-copy service at `0x04400000` to copy the complete
-   1 MB FPR from `0x02200000` to its linked base at `0x06000000`.
-4. Installs the two game relocation veneers after the FPR copy.
-5. Calls the clean resident constructor at `0x04400800`; it replaces
-   `0x06000000..0x0600EFFF`, leaving raw FPR offset `0xF000+` at matching
-   HWRAM offsets, then loads `VBR=0x06000000` and `GBR=0xFFFFFE00`.
-6. Verifies the first surviving game word at `0x0600F000` is `0x1F35A013`
-   (FPR offset `0xF000`).
-7. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
+3. Fills `0x0600F000..0x0600FFFF` with the `SEGA` sentinel word.
+4. Uses the native CS1 long-copy service at `0x04400000` to copy `0xF0000`
+   bytes from FPR `0x02201000` to `0x06010000`.
+5. Installs the two game relocation veneers after the FPR copy.
+6. Calls the clean resident constructor at `0x04400800`, then loads
+   `VBR=0x06000000` and `GBR=0xFFFFFE00`.
+7. Verifies the first copied game word at `0x06010000` is `0x4F22B0C3`
+   (FPR offset `0x1000`).
+8. Writes `0x5AA5A55A` to `0x06000000` (heartbeat — observable in a
    Mednafen save-state dump even without visible VDP2 output).
-8. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
+9. Writes to VDP2 TVMD / BKTAU / BKTAL registers + VRAM word 0 to
    turn the display on with a bright magenta back-screen.
-9. Halts in a `nop ; bra halt ; nop` loop.
+10. Halts in a `nop ; bra halt ; nop` loop.
 
 If the copy verification fails, the heartbeat is `0xDEAD1000` and the
 back-screen is red instead of magenta.
@@ -127,7 +127,7 @@ installing a real Saturn BIOS or running on real hardware.
 0x0EC  _start           (slave SH-2 SP — unused)
 0x0F0  reserved         (16 bytes of 0)
 0x100  _start           (entry point — SH-2 code)
-0x1CC  end (460 bytes total; still well inside the 4 KB overlay)
+0x1E4  end (484 bytes total; still well inside the 4 KB overlay)
 ```
 
 ## Known limitations (explicit Phase-1 cut)

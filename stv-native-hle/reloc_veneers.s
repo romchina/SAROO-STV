@@ -585,6 +585,7 @@ stv_service_redirect_table:
     .long 0x00003842, stv_channel_table_dispatch
     .long 0x00004114, stv_bootstrap_handoff
     .long 0x0000426C, stv_handler_table_update
+    .long 0x000034C4, stv_video_shutdown_fast
 stv_service_redirect_table_end:
     .long 0x00000000, 0x00000000
 
@@ -1087,3 +1088,23 @@ resident_veneer_table:
     .long 0x060014C0, stv_resident_copy_128
     .long 0x060014E0, stv_resident_copy_20
     .long 0x00000000, 0x00000000
+
+! Baku's game-visible 0x34C4 call occurs after the BIOS boot/reset passes have
+! already completed.  Its steady-state contract is display-off plus the
+! caller-visible success/T/default-handler values; clean hardware setup lives
+! in the trampoline instead of recursively reproducing the BIOS reset chain.
+    .org 0xF00, 0
+    .global stv_video_shutdown_fast
+stv_video_shutdown_fast:
+    mov.l   video_tvmd_ptr, r3
+    mov.w   @r3, r0
+    and     #1, r0
+    mov.w   r0, @r3
+    mov.l   video_default_handler, r4
+    mov     #1, r0
+    sett
+    rts
+    nop
+    .align 2
+video_tvmd_ptr:        .long 0x25F80000
+video_default_handler: .long stv_resident_exception
