@@ -47,6 +47,15 @@ def verify(image_path: Path, manifest_path: Path, overlay_path: Path,
     if not hle_meta.get("enabled") or hle_meta.get("sha1") != sha1(hle):
         raise ValueError("native HLE manifest mismatch")
 
+    for name, metadata in manifest.get("auxiliary", {}).items():
+        if not metadata.get("implemented"):
+            continue
+        offset = int(metadata["image_offset"], 0)
+        size = int(metadata["size"])
+        payload = image[offset:offset + size]
+        if len(payload) != size or sha1(payload) != metadata.get("sha1"):
+            raise ValueError(f"embedded auxiliary mismatch: {name}")
+
     windows = manifest.get("hardware_windows")
     expected_windows = [
         {

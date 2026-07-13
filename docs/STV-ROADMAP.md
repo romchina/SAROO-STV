@@ -102,6 +102,10 @@ Sega ST-V 和 Saturn 的核心硅片几乎一模一样：
 ---
 
 ### Phase 4 — EEPROM 仿冒 + 设置持久化
+
+> Shienryu 的逐游戏 clean-HLE 路径已不需要 FPGA 仿 93C46：打包器在本地嵌入
+> 128 字节种子，原生 HLE 将设置持久化到 Saturn 备份 RAM 的 ST-V channel 15。
+> 下列 FPGA/SD 方案仍是未来通用多游戏兼容层的目标。
 **目标**：游戏的 dip switch / high score / test menu 设置能保存。
 
 **任务**：

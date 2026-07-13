@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pack_game
+import verify_saroo_image as verify_image
 
 
 class DescriptorPackerTests(unittest.TestCase):
@@ -39,7 +41,17 @@ class DescriptorPackerTests(unittest.TestCase):
                 image[offset:offset + 8],
                 bytes((source[1], source[0], source[3], source[2],
                        source[5], source[4], source[7], source[6])))
-        self.assertEqual(image[0xC00000:], bytes(0x1400000))
+        self.assertEqual(image[0xC00000:pack_game.AUXILIARY_OFFSET],
+                         bytes(pack_game.AUXILIARY_OFFSET - 0xC00000))
+        eeprom_payload = self.payloads["eeprom-shienryu.bin"]
+        self.assertEqual(
+            image[pack_game.AUXILIARY_OFFSET:
+                  pack_game.AUXILIARY_OFFSET + len(eeprom_payload)],
+            eeprom_payload)
+        self.assertEqual(
+            image[pack_game.AUXILIARY_OFFSET + len(eeprom_payload):],
+            bytes(pack_game.IMAGE_SIZE - pack_game.AUXILIARY_OFFSET
+                  - len(eeprom_payload)))
         self.assertEqual(manifest["format"], "saroo-stv-cart-v2")
         self.assertEqual(manifest["game"], "shienryu")
         self.assertEqual(manifest["port_status"], "hardware-candidate")
@@ -61,7 +73,10 @@ class DescriptorPackerTests(unittest.TestCase):
         self.assertEqual(resident["backup_length"], 0x5F4)
         eeprom = manifest["auxiliary"]["eeprom-shienryu.bin"]
         self.assertEqual(eeprom["kind"], "93c46-eeprom")
-        self.assertFalse(eeprom["implemented"])
+        self.assertTrue(eeprom["implemented"])
+        self.assertEqual(eeprom["image_offset"], "0x01e00000")
+        self.assertEqual(eeprom["saturn_address"], "0x04e00000")
+        self.assertEqual(eeprom["destination"], "0x06000780")
         self.assertEqual(eeprom["sha1"], hashlib.sha1(
             self.payloads["eeprom-shienryu.bin"]).hexdigest())
 
@@ -77,6 +92,32 @@ class DescriptorPackerTests(unittest.TestCase):
         self.assertEqual(
             image[pack_game.HLE_OFFSET:pack_game.HLE_OFFSET + len(hle)], hle)
         self.assertEqual(manifest["port_status"], "hardware-candidate")
+
+    def test_verifier_checks_embedded_eeprom(self):
+        overlay = b"SEGA SEGASATURN " + bytes(32)
+        hle = bytes(range(32))
+        image, manifest = pack_game.build_image(
+            self.shienryu, self.directory, verify_hashes=False,
+            boot_overlay=overlay, native_hle=hle)
+        image_path = self.directory / "shienryu.bin"
+        manifest_path = self.directory / "shienryu.bin.json"
+        overlay_path = self.directory / "trampoline.bin"
+        hle_path = self.directory / "native-hle.bin"
+        image_path.write_bytes(image)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        overlay_path.write_bytes(overlay)
+        hle_path.write_bytes(hle)
+        verify_image.verify(
+            image_path, manifest_path, overlay_path, hle_path)
+
+        changed = bytearray(image)
+        changed[pack_game.AUXILIARY_OFFSET] ^= 0xFF
+        image_path.write_bytes(changed)
+        manifest["image_sha1"] = hashlib.sha1(changed).hexdigest()
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "embedded auxiliary"):
+            verify_image.verify(
+                image_path, manifest_path, overlay_path, hle_path)
 
     def test_descriptor_rejects_overlapping_operations(self):
         descriptor = {
@@ -101,8 +142,19 @@ class DescriptorPackerTests(unittest.TestCase):
         descriptor["boot_profile"] = dict(descriptor["boot_profile"])
         descriptor["boot_profile"]["destination"] = "0x060ff000"
         path = self.directory / "bad-profile.json"
-        path.write_text(__import__("json").dumps(descriptor), encoding="utf-8")
+        path.write_text(json.dumps(descriptor), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "exceeds HWRAM"):
+            pack_game.load_descriptor(path)
+
+    def test_descriptor_rejects_auxiliary_outside_reserved_window(self):
+        descriptor = dict(self.shienryu)
+        descriptor["auxiliary"] = [dict(self.shienryu["auxiliary"][0])]
+        descriptor["auxiliary"][0]["embed"] = dict(
+            descriptor["auxiliary"][0]["embed"])
+        descriptor["auxiliary"][0]["embed"]["image_offset"] = 0x01DFFFFF
+        path = self.directory / "bad-auxiliary.json"
+        path.write_text(json.dumps(descriptor), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "reserved window"):
             pack_game.load_descriptor(path)
 
 

@@ -1841,9 +1841,22 @@ stv_shienryu_profile_init:
     mov.l   shien_slot_648, r1
     mov.l   shien_backup_mark_ptr, r0
     mov.l   r0, @r1
+    mov.l   shien_slot_61c, r1
+    mov.l   shien_eeprom_load_ptr, r0
+    mov.l   r0, @r1
+    mov.l   shien_slot_620, r1
+    mov.l   shien_eeprom_save_ptr, r0
+    mov.l   r0, @r1
+    mov.l   shien_slot_624, r1
+    mov.l   r0, @r1
     mov.l   shien_channel_ptr, r1
     mov     #4, r0
     mov.b   r0, @r1
+    sts.l   pr, @-r15
+    mov.l   shien_eeprom_load_ptr, r0
+    jsr     @r0
+    nop
+    lds.l   @r15+, pr
     .endif
     rts
     nop
@@ -1856,15 +1869,20 @@ shien_mask_update: .long 0x06000C0A
 shien_slot_640:    .long 0x06000640
 shien_slot_644:    .long 0x06000644
 shien_slot_648:    .long 0x06000648
+shien_slot_61c:    .long 0x0600061C
+shien_slot_620:    .long 0x06000620
+shien_slot_624:    .long 0x06000624
 shien_channel_ptr: .long 0x06000650
 shien_backup_probe_ptr:  .long stv_shienryu_backup_probe
 shien_backup_access_ptr: .long stv_resident_strided_dispatch
 shien_backup_mark_ptr:   .long stv_shienryu_backup_mark
+shien_eeprom_load_ptr:   .long stv_shienryu_eeprom_load
+shien_eeprom_save_ptr:   .long stv_shienryu_eeprom_save
 
     ! BIOS 0x3744 probes the start of the interleaved battery-backed area by
     ! dispatching mode 1 through resident callback 0x06000644.  Keep it native
     ! so Shienryu can validate and initialize its per-game backup channel.
-    .org 0x17C0, 0
+    .org 0x17E0, 0
     .global stv_shienryu_backup_probe
 stv_shienryu_backup_probe:
     mov     #1, r4
@@ -1877,7 +1895,7 @@ shien_backup_base: .long 0x20180000
 
     ! Resident 0x06001190 marks the channel state dirty/ready for the BIOS
     ! backup service.  Shienryu reaches it through callback slot 0x06000648.
-    .org 0x17E0, 0
+    .org 0x1800, 0
     .global stv_shienryu_backup_mark
 stv_shienryu_backup_mark:
     mov.l   shien_backup_flag, r1
@@ -1887,4 +1905,172 @@ stv_shienryu_backup_mark:
     nop
     .align 2
 shien_backup_flag: .long 0x06000653
+
+    ! The clean path does not expose an ST-V 93C46 on Saturn's SMPC pins.
+    ! Keep the BIOS-compatible 128-byte workspace at 0x06000780, seed it
+    ! from the game image on first boot, and persist it in otherwise unused
+    ! ST-V backup channel 15.  Physical backup RAM stores bytes at odd
+    ! addresses, hence the two-byte stride below.
+    .org 0x1840, 0
+    .global stv_shienryu_eeprom_load
+stv_shienryu_eeprom_load:
+    sts.l   pr, @-r15
+    mov.l   shien_eeprom_store_base, r1
+    add     #1, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #'S', r0
+    bf      shien_eeprom_seed
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #'R', r0
+    bf      shien_eeprom_seed
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #'E', r0
+    bf      shien_eeprom_seed
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #'E', r0
+    bf      shien_eeprom_seed
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    cmp/eq  #1, r0
+    bf      shien_eeprom_seed
+
+    ! Header: "SREE", version, checksum, checksum complement.
+    add     #2, r1
+    mov.b   @r1, r2
+    extu.b  r2, r2
+    shll8   r2
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    or      r0, r2
+    add     #2, r1
+    mov.b   @r1, r3
+    extu.b  r3, r3
+    shll8   r3
+    add     #2, r1
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    or      r0, r3
+    not     r2, r0
+    extu.w  r0, r0
+    cmp/eq  r3, r0
+    bf      shien_eeprom_seed
+
+    add     #2, r1
+    mov.l   shien_eeprom_workspace, r6
+    mov     #0, r4
+    mov     #0x7F, r5
+    add     #1, r5
+shien_eeprom_load_loop:
+    mov.b   @r1, r0
+    extu.b  r0, r0
+    mov.b   r0, @r6
+    add     r0, r4
+    add     #2, r1
+    add     #1, r6
+    dt      r5
+    bf      shien_eeprom_load_loop
+    extu.w  r4, r4
+    cmp/eq  r2, r4
+    bf      shien_eeprom_seed
+    mov     #0, r0
+    lds.l   @r15+, pr
+    rts
+    nop
+
+shien_eeprom_seed:
+    mov.l   shien_eeprom_seed_source, r1
+    mov.l   shien_eeprom_workspace, r2
+    mov     #0x7F, r3
+    add     #1, r3
+shien_eeprom_seed_loop:
+    mov.b   @r1+, r0
+    mov.b   r0, @r2
+    add     #1, r2
+    dt      r3
+    bf      shien_eeprom_seed_loop
+    bsr     stv_shienryu_eeprom_save
+    nop
+    lds.l   @r15+, pr
+    rts
+    nop
+
+    .align 2
+shien_eeprom_store_base:  .long 0x2018E200
+shien_eeprom_workspace:   .long 0x06000780
+shien_eeprom_seed_source: .long 0x04E00000
+
+    .org 0x1940, 0
+    .global stv_shienryu_eeprom_save
+stv_shienryu_eeprom_save:
+    ! Invalidate the record before rewriting its data and checksums.
+    mov.l   shien_eeprom_save_base, r1
+    add     #1, r1
+    mov     #0, r0
+    mov.b   r0, @r1
+
+    mov.l   shien_eeprom_save_workspace, r2
+    mov.l   shien_eeprom_save_data, r3
+    mov     #0, r4
+    mov     #0x7F, r5
+    add     #1, r5
+shien_eeprom_save_loop:
+    mov.b   @r2+, r0
+    extu.b  r0, r0
+    mov.b   r0, @r3
+    add     r0, r4
+    add     #2, r3
+    dt      r5
+    bf      shien_eeprom_save_loop
+    extu.w  r4, r4
+
+    ! Store checksum and complement before publishing the magic byte.
+    mov.l   shien_eeprom_save_checksum, r1
+    mov     r4, r0
+    shlr8   r0
+    mov.b   r0, @r1
+    add     #2, r1
+    mov.b   r4, @r1
+    not     r4, r0
+    extu.w  r0, r0
+    add     #2, r1
+    mov     r0, r2
+    shlr8   r2
+    mov.b   r2, @r1
+    add     #2, r1
+    mov.b   r0, @r1
+
+    mov.l   shien_eeprom_save_base, r1
+    add     #3, r1
+    mov     #'R', r0
+    mov.b   r0, @r1
+    add     #2, r1
+    mov     #'E', r0
+    mov.b   r0, @r1
+    add     #2, r1
+    mov.b   r0, @r1
+    add     #2, r1
+    mov     #1, r0
+    mov.b   r0, @r1
+    mov.l   shien_eeprom_save_base, r1
+    add     #1, r1
+    mov     #'S', r0
+    mov.b   r0, @r1
+    mov     #0, r0
+    rts
+    nop
+
+    .align 2
+shien_eeprom_save_base:      .long 0x2018E200
+shien_eeprom_save_data:      .long 0x2018E213
+shien_eeprom_save_checksum:  .long 0x2018E20B
+shien_eeprom_save_workspace: .long 0x06000780
     .endif

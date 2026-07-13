@@ -99,6 +99,8 @@ HWRAM dispatcher/游戏 veneer 指向它们；模拟器 host callback 本身不�
 - 注：孪生那两个 SMPC shim 主要是「跑 ST-V BIOS 引导」时才需要——真机走 trampoline 不跑 ST-V BIOS 引导，故 SYSRES shim 大概率不需要；但 PDR/端口的「ST-V idle 值」可能仍要靠 IOGA/固件呈现。
 
 ### F. EEPROM — Phase 4
+- Shienryu 候选已采用逐游戏 HLE：镜像种子 + Saturn 备份 RAM channel 15，
+  无需实体 93C46；下面保留的是通用多游戏硬件方案。
 - 仿 93C46（3 线串行，FPGA 状态机），每游戏一个 `.eeprom` 文件存 SD。
 
 ---

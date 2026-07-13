@@ -15,6 +15,8 @@ OVERLAY_OFFSET: Final = 0x01F00000
 OVERLAY_MAX: Final = 0x1000
 HLE_OFFSET: Final = 0x01400000
 HLE_MAX: Final = 0x10000
+AUXILIARY_OFFSET: Final = 0x01E00000
+AUXILIARY_MAX: Final = 0x10000
 
 
 def sha1(data: bytes) -> str:
@@ -42,6 +44,27 @@ def load_descriptor(path: Path) -> dict[str, Any]:
             raise ValueError("boot profile destination range exceeds HWRAM")
         if not destination <= entry < destination + length:
             raise ValueError("boot profile entry is outside copied program")
+    for entry in descriptor.get("auxiliary", []):
+        embed = entry.get("embed")
+        if embed is None:
+            if entry.get("implemented"):
+                raise ValueError(
+                    f"{entry['name']}: implemented auxiliary lacks embed metadata")
+            continue
+        offset = int(embed["image_offset"])
+        size = int(entry["size"])
+        if (offset < AUXILIARY_OFFSET
+                or offset + size > AUXILIARY_OFFSET + AUXILIARY_MAX):
+            raise ValueError(
+                f"{entry['name']}: auxiliary embed exceeds reserved window")
+        expected_saturn = 0x04000000 + offset - 0x01000000
+        if int(embed["saturn_address"], 0) != expected_saturn:
+            raise ValueError(
+                f"{entry['name']}: auxiliary Saturn address does not match CS1")
+        destination = int(embed["destination"], 0)
+        if destination < 0x06000000 or destination + size > 0x06100000:
+            raise ValueError(
+                f"{entry['name']}: auxiliary destination exceeds HWRAM")
     return descriptor
 
 
@@ -97,9 +120,12 @@ def _reserve_module(image: bytearray, occupied: bytearray, offset: int,
         return
     if len(payload) > maximum:
         raise ValueError(f"{label} exceeds {maximum:#x} bytes")
+    if offset < 0 or offset + len(payload) > len(image):
+        raise ValueError(f"{label} exceeds image")
     if any(occupied[offset:offset + len(payload)]):
         raise ValueError(f"{label} overlaps game ROM data")
     image[offset:offset + len(payload)] = payload
+    occupied[offset:offset + len(payload)] = bytes([1]) * len(payload)
 
 
 def build_image(descriptor: dict[str, Any], directory: Path,
@@ -127,11 +153,28 @@ def build_image(descriptor: dict[str, Any], directory: Path,
     auxiliary: dict[str, dict[str, Any]] = {}
     for entry in descriptor.get("auxiliary", []):
         data = _read_source(directory, entry, verify_hashes)
-        auxiliary[entry["name"]] = {
+        embed = entry.get("embed")
+        implemented = bool(entry.get("implemented", False))
+        if implemented != (embed is not None):
+            raise ValueError(
+                f"{entry['name']}: implemented flag and embed metadata disagree")
+        metadata = {
             "kind": entry["kind"],
             "sha1": sha1(data),
-            "implemented": bool(entry.get("implemented", False)),
+            "implemented": implemented,
+            "size": len(data),
         }
+        if embed is not None:
+            offset = int(embed["image_offset"])
+            _reserve_module(image, occupied, offset, len(data), data,
+                            f"auxiliary {entry['name']}")
+            metadata.update({
+                "image_offset": f"0x{offset:08x}",
+                "saturn_address": embed["saturn_address"],
+                "destination": embed["destination"],
+                "persistence": embed.get("persistence"),
+            })
+        auxiliary[entry["name"]] = metadata
 
     if boot_overlay is not None and not boot_overlay.startswith(
             b"SEGA SEGASATURN "):

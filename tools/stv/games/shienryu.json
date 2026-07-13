@@ -30,7 +30,13 @@
       "kind": "93c46-eeprom",
       "size": 128,
       "sha1": "e78545e8f62d19f8e00197c62ff0e56f6c85e355",
-      "implemented": false
+      "implemented": true,
+      "embed": {
+        "image_offset": 31457280,
+        "saturn_address": "0x04e00000",
+        "destination": "0x06000780",
+        "persistence": "battery-backed ST-V channel 15 via native HLE"
+      }
     }
   ],
   "boot_profile": {
@@ -91,7 +97,19 @@
     "backup_channel": 4,
     "backup_logical_base": "0x20183d00",
     "backup_length": 1524,
-    "backup_checksum": "stored big-endian word equals bitwise-NOT of the 16-bit byte sum"
+    "backup_checksum": "stored big-endian word equals bitwise-NOT of the 16-bit byte sum",
+    "operator_settings": {
+      "workspace": "0x06000780",
+      "seed_saturn_address": "0x04e00000",
+      "persistent_physical_base": "0x2018e200",
+      "persistent_channel": 15,
+      "length": 128,
+      "callbacks": {
+        "0x0600061c": "native EEPROM load",
+        "0x06000620": "native EEPROM save",
+        "0x06000624": "native EEPROM save"
+      }
+    }
   },
   "oracle": {
     "backend": "yabause-stv SAROO mapping twin with Saturn BIOS",
@@ -109,7 +127,6 @@
   },
   "required_relocation": null,
   "blockers": [
-    "implement persistent operator settings without a physical ST-V 93C46",
     "complete final electrical and timing validation on SAROO hardware"
   ]
 }

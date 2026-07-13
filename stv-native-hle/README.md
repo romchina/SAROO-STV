@@ -106,6 +106,23 @@ INTBACK and advances a non-blocking SNDOFF/SNDON sequence, reproducing the
 Yabause twin's former vector-write restart hook on real Saturn hardware. Both
 commands and the Slave-SH2 park command are required by the dynamic smoke test.
 
+## Shienryu operator settings
+
+The Shienryu profile binds the resident EEPROM slots `0x0600061C/620/624` to
+native load/save entries at `0x04401840/0x04401940`. The 128-byte 93C46 image is
+used as a first-boot seed from CS1 `0x04E00000`, reconstructed at the BIOS
+workspace `0x06000780`, and stored with magic, version, 16-bit checksum and
+checksum complement in ST-V backup channel 15 (`0x2018E200`). Bytes use the
+Saturn backup RAM's odd-address stride. The game keeps its independent
+1524-byte channel-4 record unchanged.
+
+The Yabause SAROO twin verified both directions: a blank record seeds and saves
+all 128 bytes, while a checksum-valid record containing a deliberately changed
+last byte restores that byte instead of the image default. Both paths continued
+to game frames without a low-ROM edge or invalid opcode. This is a clean-HLE
+replacement for the ST-V motherboard's physical 93C46; no EEPROM payload is
+part of this repository.
+
 `stv_bootstrap_handoff` reproduces the measured non-returning `0x4114`
 transition: it builds the 32-byte frame at `0x060FFFDC`, restores the observed
 register state (`GBR=0x060D28C8`, `R4=0x120`, `R5=0x20180108`,

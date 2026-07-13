@@ -80,12 +80,13 @@ game's channel-4 data at logical base `0x20183D00`; the 1524-byte record is
 valid when its first big-endian word equals the bitwise-NOT of the 16-bit sum
 of all record bytes.
 
-The remaining software policy question is operator-setting persistence. The
-ST-V motherboard exposes a physical 93C46 through its control wiring, while a
-SAROO cartridge does not. This does not block game boot or attract, but a
-public hardware profile must decide whether to seed fixed operator defaults or
-store an emulated 93C46 image elsewhere. Final electrical/timing validation is
-necessarily deferred until a SAROO and Saturn are available.
+Operator-setting persistence is now closed without a physical 93C46. The local
+packer embeds the authorized 128-byte image at cart offset `0x01E00000`; the
+native profile seeds the BIOS-compatible workspace at `0x06000780` and stores
+updates in battery-backed ST-V channel 15. A versioned `SREE` record includes a
+16-bit byte-sum and its complement. The independent Shienryu game record remains
+in channel 4. Final electrical/timing validation is necessarily deferred until
+a SAROO and Saturn are available.
 
 ## Clean native-HLE result
 
@@ -119,6 +120,13 @@ its checksum. The following boot compared the saved system byte equal and
 re-entered attract by frame 200. A reset-sequence run continued through frame
 1200 without a Master SH-2 low-ROM edge or invalid opcode.
 
-This closes the hardware-independent boot, backup-RAM, and reset-to-attract
-work. The descriptor is now `hardware-candidate`; only operator-setting policy
-and real SAROO electrical/timing validation remain.
+The operator path was verified twice in the SAROO twin. With a blank channel 15,
+the 128-byte workspace and saved record exactly matched the packed seed at frame
+600. A second run used a valid record whose last data byte was deliberately
+changed to `0x5A`; HWRAM restored `0x5A` at `0x060007FF`, proving that persistent
+data wins over the image seed. Both runs remained BIOS-free and had no invalid
+opcode.
+
+This closes the hardware-independent boot, game backup-RAM, operator settings,
+and reset-to-attract work. The descriptor remains `hardware-candidate`; only
+real SAROO electrical/timing validation remains.

@@ -44,9 +44,12 @@ executing ST-V BIOS, taking a Master SH-2 low-ROM edge, or raising an invalid
 opcode through the 1200-frame reset run. The measured boot
 copy is image `0x00200000..0x002F9000` to HWRAM
 `0x06003000..0x060FC000`, followed by entry at `0x06004010`. The packer still
-accepts the Shienryu run modules without a development override. Operator
-settings still need a software persistence policy because SAROO has no physical
-ST-V 93C46, and final electrical/timing validation still requires real SAROO.
+accepts the Shienryu run modules without a development override. Its authorized
+128-byte EEPROM is embedded at image offset `0x01E00000` (CS1
+`0x04E00000`) only during local packing. Native HLE restores the BIOS workspace
+at `0x06000780` and persists later operator changes in battery-backed ST-V
+channel 15, so no physical 93C46 is required. Final electrical/timing validation
+still requires real SAROO.
 
 Build the current hardware-candidate image with:
 
@@ -58,6 +61,10 @@ python tools/stv/pack_game.py tools/stv/games/shienryu.json \
   --boot-overlay stv-trampoline/trampoline-shienryu-run.bin \
   --native-hle stv-native-hle/stv-native-hle-shienryu.bin
 ```
+
+The EEPROM file remains a required local pack input and is covered by the
+descriptor SHA-1 check. It is never generated, copied into source directories,
+or committed to Git.
 
 Given a 1 MB big-endian HWRAM dump captured after entry, quantify how much of
 the measured boot copy remains byte-identical and how much was changed at

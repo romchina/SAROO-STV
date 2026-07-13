@@ -13,17 +13,23 @@ ST-V（Titan 主板）与 Saturn 的核心硅片几乎完全相同：2× SH-2 @ 
 
 ## 当前进度
 
-**核心假设已视觉验证**：`bakubaku`（BAKU BAKU ANIMAL）的 ST-V 游戏码在 Yabause（stock Saturn 核心）上真实执行——attract 主循环 + vblank 中断健康运行、不崩；其**完整 attract 画面（VDP2 绿叶背景 + VDP1 精灵：INSERT COIN(S)/眼睛/CREDIT）渲染出来，像素级吻合 MAME** 真机。
+**Baku Baku 与 Shienryu 已进入 SAROO `hardware-candidate` 状态。** 两个 32 MB
+候选镜像都由描述符、原生 SH-2 HLE 和启动 trampoline 在本地构建，不包含
+ST-V BIOS。软件孪生已经验证从卡带入口冷启动、输入桥、声音/视频初始化、
+attract 循环，以及无 Master SH-2 低 BIOS 跳转和 invalid opcode。
+
+Shienryu 还通过了新存档、校验有效的连续复位、再次进入 attract，以及
+93C46 操作员设置的种子和持久恢复。设置由原生 HLE 保存到 Saturn
+电池备份 RAM，不要求 SAROO 上存在实体 ST-V EEPROM。现在唯一无法在 PC
+上完成的发布阻塞项是真 Saturn + SAROO 的电气、时序和长时间稳定性验证。
 
 | ![full attract: MAME vs twin](docs/img/stv-attract-full-vs-mame.png) |
 |:--:|
 | 左 = MAME（ST-V 真值）  右 = Yabause Saturn 软件孪生。完整 attract 逐像素一致。 |
 
-⚠️ 这是**快照回放孪生**（把 MAME 捕获的内存/寄存器/VDP 状态灌进 Yabause 再续跑），**不是**插卡从头 boot，也**还不可玩**。当前靠 3 个诊断 scaffold（`STV_FORCE_DISP` 强制 VDP2 显示位 + `STV_VDP1FB` blit 捕获的 VDP1 帧缓冲 + `STV_SPRI7` 精灵优先级）。已知待办：
-
-- **faithful 修复 3 个 scaffold**：① DISP 根因=BIOS @0x34DE 关显示，需 HLE（M-HLE-3）；② VDP1 精灵=直接 blit 捕获帧缓冲，真机要 HLE/驱动 VDP1；③ 精灵优先级异常（真实 PRISA=6 本该赢却需强制 7）
-- **从头引导 + 输入/投币**：未做
-- **真机 SAROO HLE 路**：未开始
+上图保留的是早期 MAME/Yabause 像素 oracle。当前 clean 路径已经取代当时的
+快照与显示 scaffold；具体复现命令、候选镜像格式和验证边界见
+[`tools/stv/README.md`](tools/stv/README.md)。
 
 逆向 / 系统化调试的全过程记录见 [`docs/superpowers/recon/`](docs/superpowers/recon/)。
 
