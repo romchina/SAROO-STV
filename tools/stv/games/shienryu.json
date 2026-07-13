@@ -2,7 +2,7 @@
   "format": "saroo-stv-game-v1",
   "game": "shienryu",
   "title": "Shienryu (JUET 961226 V1.000)",
-  "port_status": "clean-oracle-booted",
+  "port_status": "hardware-candidate",
   "image_size": 33554432,
   "roms": [
     {
@@ -87,20 +87,29 @@
       "0x06000a08": "0x000044fc",
       "0x06000a0c": "0x000044fc",
       "0x06000a10": "0x000044fc"
-    }
+    },
+    "backup_channel": 4,
+    "backup_logical_base": "0x20183d00",
+    "backup_length": 1524,
+    "backup_checksum": "stored big-endian word equals bitwise-NOT of the 16-bit byte sum"
   },
   "oracle": {
     "backend": "yabause-stv SAROO mapping twin with Saturn BIOS",
-    "result": "clean native-HLE path reaches game backup-RAM initialization screen",
-    "validated_through_frame": 600,
+    "result": "clean native-HLE path reaches and re-enters the attract loop with persistent backup RAM",
+    "validated_through_frame": 1200,
     "stv_bios_executed": false,
     "master_low_rom_edges": 0,
-    "invalid_opcode": false
+    "invalid_opcode": false,
+    "backup_sequence": [
+      "fresh channel initializes with a valid checksum and reaches attract",
+      "next reset takes the checksum-valid GOOD MORNING path and updates state",
+      "following boot takes the checksum-valid fast path and re-enters attract"
+    ],
+    "twin_note": "research Yabause needs synchronous consecutive INTBACK completion; real Saturn SMPC supplies this service"
   },
   "required_relocation": null,
   "blockers": [
     "implement persistent operator settings without a physical ST-V 93C46",
-    "validate reset-to-attract behavior beyond the backup-RAM initialization screen",
     "complete final electrical and timing validation on SAROO hardware"
   ]
 }

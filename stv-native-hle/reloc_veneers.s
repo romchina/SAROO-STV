@@ -1831,6 +1831,20 @@ stv_shienryu_profile_init:
     mov.l   shien_slot_344, r1
     mov.l   shien_mask_update, r0
     mov.l   r0, @r1
+    .ifdef SHIENRYU_PROFILE
+    mov.l   shien_slot_640, r1
+    mov.l   shien_backup_probe_ptr, r0
+    mov.l   r0, @r1
+    mov.l   shien_slot_644, r1
+    mov.l   shien_backup_access_ptr, r0
+    mov.l   r0, @r1
+    mov.l   shien_slot_648, r1
+    mov.l   shien_backup_mark_ptr, r0
+    mov.l   r0, @r1
+    mov.l   shien_channel_ptr, r1
+    mov     #4, r0
+    mov.b   r0, @r1
+    .endif
     rts
     nop
     .align 2
@@ -1838,3 +1852,39 @@ shien_slot_340:    .long 0x06000340
 shien_slot_344:    .long 0x06000344
 shien_mask_set:    .long 0x06000C00
 shien_mask_update: .long 0x06000C0A
+    .ifdef SHIENRYU_PROFILE
+shien_slot_640:    .long 0x06000640
+shien_slot_644:    .long 0x06000644
+shien_slot_648:    .long 0x06000648
+shien_channel_ptr: .long 0x06000650
+shien_backup_probe_ptr:  .long stv_shienryu_backup_probe
+shien_backup_access_ptr: .long stv_resident_strided_dispatch
+shien_backup_mark_ptr:   .long stv_shienryu_backup_mark
+
+    ! BIOS 0x3744 probes the start of the interleaved battery-backed area by
+    ! dispatching mode 1 through resident callback 0x06000644.  Keep it native
+    ! so Shienryu can validate and initialize its per-game backup channel.
+    .org 0x17C0, 0
+    .global stv_shienryu_backup_probe
+stv_shienryu_backup_probe:
+    mov     #1, r4
+    mov.l   shien_backup_base, r5
+    mov     #0, r6
+    bra     stv_resident_strided_dispatch
+    nop
+    .align 2
+shien_backup_base: .long 0x20180000
+
+    ! Resident 0x06001190 marks the channel state dirty/ready for the BIOS
+    ! backup service.  Shienryu reaches it through callback slot 0x06000648.
+    .org 0x17E0, 0
+    .global stv_shienryu_backup_mark
+stv_shienryu_backup_mark:
+    mov.l   shien_backup_flag, r1
+    mov     #1, r0
+    mov.b   r0, @r1
+    rts
+    nop
+    .align 2
+shien_backup_flag: .long 0x06000653
+    .endif

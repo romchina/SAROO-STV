@@ -72,15 +72,20 @@ The original 93C46 image is big-endian word data. The oracle reads all 64 words
 correctly with that representation; pair-swapping it causes the game/BIOS to
 rewrite the EEPROM and is wrong.
 
-## Remaining software work
+## Software completion boundary
 
-1. Make the cold trampoline consume the descriptor copy and entry fields.
-2. Construct a Shienryu-specific clean resident and redirect every post-entry
-   low-ROM service without executing ST-V BIOS bytes.
-3. Implement persistent 93C46 and ST-V backup RAM behavior.
-4. Re-run the oracle with the BIOS path disabled, then mark the descriptor
-   `hardware-candidate` only after the clean path survives the attract loop.
-5. Perform the final electrical/timing validation on SAROO hardware.
+The descriptor-driven cold copy, Shienryu resident, post-entry native services,
+and BIOS-free oracle run are complete. Saturn battery-backed RAM supplies the
+game's channel-4 data at logical base `0x20183D00`; the 1524-byte record is
+valid when its first big-endian word equals the bitwise-NOT of the 16-bit sum
+of all record bytes.
+
+The remaining software policy question is operator-setting persistence. The
+ST-V motherboard exposes a physical 93C46 through its control wiring, while a
+SAROO cartridge does not. This does not block game boot or attract, but a
+public hardware profile must decide whether to seed fixed operator defaults or
+store an emulated 93C46 image elsewhere. Final electrical/timing validation is
+necessarily deferred until a SAROO and Saturn are available.
 
 ## Clean native-HLE result
 
@@ -93,8 +98,27 @@ one missing resident API slot: game code at `0x0604A726` calls through
 
 With the fix, the SAROO mapping twin used the Saturn BIOS only to establish the
 host machine, forced cartridge entry at `0x02000100`, closed the 4 KB FPGA-style
-overlay, executed native HLE from CS1, and reached Shienryu's own
-`BACK UP RAM INITIALIZED` screen. Through frame 600 the Master SH-2 produced no
-low-ROM edge and no invalid opcode. This is the first Shienryu clean-oracle boot;
-the experimental image remains gated because operator settings, reset-to-attract,
-and real hardware timing are not yet validated.
+overlay, and executed native HLE from CS1. The first run reached Shienryu's own
+`BACK UP RAM INITIALIZED` screen but exposed three additional facts:
+
+1. The clean constructor had left backup callback slots `0x06000640/644/648`
+   as generic no-ops. Shienryu now installs a native probe, the existing clean
+   interleaved read/write dispatcher, and the resident dirty/ready marker.
+2. The game uses battery-backed channel 4, not the constructor's zero default.
+   Selecting channel 4 maps the record to `0x20183D00`.
+3. Research Yabause leaves the first SMPC `INTBACK` query in a segmented
+   transfer state, so the immediately following query never completes. A
+   research-only synchronous completion shim is required to model the real
+   Saturn SMPC behavior. This shim is not part of the SAROO image.
+
+After those corrections, a freshly formatted backup RAM produced a valid
+record (`stored 0x6521 == ~sum(0x9ADE)`) and entered the actual attract scene by
+frame 300, then the ranking screen by frame 600. A later boot took the
+checksum-valid `GOOD MORNING!!` branch and updated the record while preserving
+its checksum. The following boot compared the saved system byte equal and
+re-entered attract by frame 200. A reset-sequence run continued through frame
+1200 without a Master SH-2 low-ROM edge or invalid opcode.
+
+This closes the hardware-independent boot, backup-RAM, and reset-to-attract
+work. The descriptor is now `hardware-candidate`; only operator-setting policy
+and real SAROO electrical/timing validation remain.

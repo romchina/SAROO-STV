@@ -57,6 +57,11 @@ def main() -> int:
         "stv_shienryu_handoff": 0x04401700,
         "stv_shienryu_profile_init": 0x04401740,
     }
+    if profile == "shienryu":
+        expected.update({
+            "stv_shienryu_backup_probe": 0x044017C0,
+            "stv_shienryu_backup_mark": 0x044017E0,
+        })
     required = {}
     for name, expected_address in expected.items():
         match = re.search(rf"^([0-9a-fA-F]+)\s+\w\s+{name}$", symbols,
@@ -77,7 +82,12 @@ def main() -> int:
 
     raw = elf.with_suffix(".bin").read_bytes()
     if profile == "shienryu":
-        for value in (0x06004632, 0x06004744, 0x06004010):
+        for value in (0x06004632, 0x06004744, 0x06004010,
+                      0x06000640, 0x06000644, 0x06000648,
+                      0x06000650, 0x06000653, 0x20180000,
+                      required["stv_resident_strided_dispatch"],
+                      required["stv_shienryu_backup_probe"],
+                      required["stv_shienryu_backup_mark"]):
             if value.to_bytes(4, "big") not in raw:
                 raise SystemExit(
                     f"Shienryu profile literal absent: {value:#010x}")

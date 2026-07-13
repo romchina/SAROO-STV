@@ -37,15 +37,27 @@ python tools/stv/pack_game.py tools/stv/games/shienryu.json \
   ROM_DIRECTORY shienryu-layout.bin
 ```
 
-Its status is `clean-oracle-booted`: the native-HLE image reaches Shienryu's
-own backup-RAM initialization screen without executing ST-V BIOS, taking a
-Master SH-2 low-ROM edge, or raising an invalid opcode through frame 600. The measured boot
+Its status is `hardware-candidate`: the native-HLE image initializes its
+channel-4 battery-backed data, reaches the attract loop, survives the
+checksum-valid `GOOD MORNING` reset path, and re-enters attract without
+executing ST-V BIOS, taking a Master SH-2 low-ROM edge, or raising an invalid
+opcode through the 1200-frame reset run. The measured boot
 copy is image `0x00200000..0x002F9000` to HWRAM
 `0x06003000..0x060FC000`, followed by entry at `0x06004010`. The packer still
-refuses to embed development modules unless the override is supplied.
-Shienryu now has descriptor-driven diagnostic and clean-run profiles, but still
-needs operator-setting persistence, reset-to-attract validation, and real SAROO
-electrical/timing validation before it becomes a hardware candidate.
+accepts the Shienryu run modules without a development override. Operator
+settings still need a software persistence policy because SAROO has no physical
+ST-V 93C46, and final electrical/timing validation still requires real SAROO.
+
+Build the current hardware-candidate image with:
+
+```text
+make -C stv-native-hle stv-native-hle-shienryu.bin
+make -C stv-trampoline trampoline-shienryu-run.bin
+python tools/stv/pack_game.py tools/stv/games/shienryu.json \
+  ROM_DIRECTORY shienryu-saroo-run.bin \
+  --boot-overlay stv-trampoline/trampoline-shienryu-run.bin \
+  --native-hle stv-native-hle/stv-native-hle-shienryu.bin
+```
 
 Given a 1 MB big-endian HWRAM dump captured after entry, quantify how much of
 the measured boot copy remains byte-identical and how much was changed at

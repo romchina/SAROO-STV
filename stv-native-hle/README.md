@@ -181,6 +181,9 @@ and probes were removed after the run.
 `make test-shienryu` builds `stv-native-hle-shienryu.bin`. It retains the
 shared leaf services but installs Shienryu's measured VBlank/aux callbacks
 (`0x06004632`, `0x06004744`), restores the mask API slots at
-`0x06000340/344`, and exposes the clean game handoff at `0x04401700`. Use it
+`0x06000340/344`, selects battery-backed channel 4, and restores the
+`0x06000640/644/648` backup probe/access/mark callbacks. The interleaved word
+access uses the existing clean `0x06001412` replacement. The profile exposes
+the clean game handoff at `0x04401700`. Use it
 only with `trampoline-shienryu-run.bin`; Baku's callback and handoff constants
 remain isolated in the default image.

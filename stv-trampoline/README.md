@@ -72,7 +72,7 @@ and verifies the copied `SEGA` word. It deliberately skips Baku's relocation
 patches and resident construction, halts on a magenta success/red failure
 screen, and never enters the game.
 
-Embed it only with the packer's explicit development override:
+Embed the copy-only diagnostic with the explicit development override:
 
 ```text
 python tools/stv/pack_game.py tools/stv/games/shienryu.json ROM_DIRECTORY \
@@ -82,16 +82,23 @@ python tools/stv/pack_game.py tools/stv/games/shienryu.json ROM_DIRECTORY \
   --allow-unported-modules
 ```
 
-This is a copy-path diagnostic, not a hardware game-entry image. The packer
-continues to reject modules without the override while Shienryu is
-`clean-oracle-booted` rather than `hardware-candidate`.
+This is a copy-path diagnostic, not the hardware game-entry image.
 
 `make test-shienryu-run` additionally builds the experimental clean-run
 trampoline. It constructs the Shienryu native resident before copying the game,
 then enters the game-specific handoff at native CS1 address `0x04401700`.
 Combine it only with `stv-native-hle-shienryu.bin`. The SAROO-mapping Yabause
-twin reached the game's backup-RAM initialization screen through frame 600
-without ST-V BIOS, a Master SH-2 low-ROM edge, or an invalid opcode.
+twin initialized battery-backed channel 4, entered the attract loop, passed the
+checksum-valid reset sequence, and re-entered attract without ST-V BIOS, a
+Master SH-2 low-ROM edge, or an invalid opcode. Shienryu is therefore accepted
+as a `hardware-candidate` without `--allow-unported-modules` for the run image.
+
+```text
+python tools/stv/pack_game.py tools/stv/games/shienryu.json ROM_DIRECTORY \
+  shienryu-saroo-run.bin \
+  --boot-overlay stv-trampoline/trampoline-shienryu-run.bin \
+  --native-hle stv-native-hle/stv-native-hle-shienryu.bin
+```
 
 ## Running
 

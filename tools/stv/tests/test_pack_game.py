@@ -42,7 +42,7 @@ class DescriptorPackerTests(unittest.TestCase):
         self.assertEqual(image[0xC00000:], bytes(0x1400000))
         self.assertEqual(manifest["format"], "saroo-stv-cart-v2")
         self.assertEqual(manifest["game"], "shienryu")
-        self.assertEqual(manifest["port_status"], "clean-oracle-booted")
+        self.assertEqual(manifest["port_status"], "hardware-candidate")
         self.assertIsNone(manifest["required_relocation"])
         profile = manifest["boot_profile"]
         self.assertEqual(profile["source_image_offset"], 0x200000)
@@ -56,18 +56,27 @@ class DescriptorPackerTests(unittest.TestCase):
         self.assertEqual(
             resident["handler_slots"]["0x06000a08"], "0x000044fc")
         self.assertEqual(manifest["resident_profile"], resident)
+        self.assertEqual(resident["backup_channel"], 4)
+        self.assertEqual(resident["backup_logical_base"], "0x20183d00")
+        self.assertEqual(resident["backup_length"], 0x5F4)
         eeprom = manifest["auxiliary"]["eeprom-shienryu.bin"]
         self.assertEqual(eeprom["kind"], "93c46-eeprom")
         self.assertFalse(eeprom["implemented"])
         self.assertEqual(eeprom["sha1"], hashlib.sha1(
             self.payloads["eeprom-shienryu.bin"]).hexdigest())
 
-    def test_unported_game_rejects_baku_boot_modules(self):
+    def test_hardware_candidate_accepts_boot_modules(self):
         overlay = b"SEGA SEGASATURN " + bytes(32)
-        with self.assertRaisesRegex(ValueError, "profile is not ready"):
-            pack_game.build_image(
-                self.shienryu, self.directory, verify_hashes=False,
-                boot_overlay=overlay, native_hle=bytes(32))
+        hle = bytes(range(32))
+        image, manifest = pack_game.build_image(
+            self.shienryu, self.directory, verify_hashes=False,
+            boot_overlay=overlay, native_hle=hle)
+        self.assertEqual(
+            image[pack_game.OVERLAY_OFFSET:
+                  pack_game.OVERLAY_OFFSET + len(overlay)], overlay)
+        self.assertEqual(
+            image[pack_game.HLE_OFFSET:pack_game.HLE_OFFSET + len(hle)], hle)
+        self.assertEqual(manifest["port_status"], "hardware-candidate")
 
     def test_descriptor_rejects_overlapping_operations(self):
         descriptor = {
