@@ -24,15 +24,15 @@ def verify_keil() -> None:
         if node.tag.rsplit("}", 1)[-1] == "FilePath"
     }
     required = {
-        "saturn/stv_rom.c",
-        "saturn/stv_menu.c",
+        "saturn/stv_rom.c": "Saturn/stv_rom.c",
+        "saturn/stv_menu.c": "Saturn/stv_menu.c",
     }
-    missing = sorted(required - paths)
+    missing = sorted(set(required) - paths)
     if missing:
         raise ValueError(f"Keil project missing ST-V sources: {missing}")
-    for relative in required:
-        if not (ROOT / "Firm_MCU" / relative).is_file():
-            raise ValueError(f"Keil source path does not exist: {relative}")
+    for normalized_path, actual_path in required.items():
+        if not (ROOT / "Firm_MCU" / actual_path).is_file():
+            raise ValueError(f"Keil source path does not exist: {actual_path}")
 
 
 def verify_quartus() -> None:
@@ -47,13 +47,19 @@ def verify_quartus() -> None:
             text,
         )
     }
-    required = {"ssmaster.v", "memhub.v", "cachebus.v", "cacheblk.v", "tsdram.v"}
-    missing = sorted(required - files)
+    required = {
+        "ssmaster.v": "SSMaster.v",
+        "memhub.v": "memhub.v",
+        "cachebus.v": "cachebus.v",
+        "cacheblk.v": "cacheblk.v",
+        "tsdram.v": "tsdram.v",
+    }
+    missing = sorted(set(required) - files)
     if missing:
         raise ValueError(f"Quartus project missing RTL sources: {missing}")
-    for relative in required:
-        if not (ROOT / "FPGA" / relative).is_file():
-            raise ValueError(f"Quartus source path does not exist: {relative}")
+    for normalized_path, actual_path in required.items():
+        if not (ROOT / "FPGA" / actual_path).is_file():
+            raise ValueError(f"Quartus source path does not exist: {actual_path}")
 
 
 def main() -> int:

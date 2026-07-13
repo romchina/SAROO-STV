@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# This file must stay LF-only because the Windows wrapper executes it in WSL.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
