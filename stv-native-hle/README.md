@@ -65,7 +65,10 @@ clean 20-byte resident copy at `0x04400D00`.
 The upper VBR page doubles as the resident API table. The constructor restores
 `[0x300/0x304]` as handler set/get and `[0x310/0x314]` as vector set/get,
 using native getters at `0x04401100/0x04401120`. This prevents service calls
-from accidentally entering the default interrupt `RTE` handler.
+from accidentally entering the default interrupt `RTE` handler. The vector
+setter also refreshes Saturn's shared `2RDY` word and the compact
+`0x06000600` Slave SH-2 bootstrap. Games can therefore install vector `0x94`
+and issue SMPC `SSHON` using the original dual-CPU BIOS contract.
 
 The handler entry points begin at `0x04400900`. The trampoline calls the
 initializer after copying the game and installing relocation veneers, then
@@ -196,11 +199,13 @@ and probes were removed after the run.
 ## Shienryu profile
 
 `make test-shienryu` builds `stv-native-hle-shienryu.bin`. It retains the
-shared leaf services but installs Shienryu's measured VBlank/aux callbacks
-(`0x06004632`, `0x06004744`), restores the mask API slots at
+shared leaf services, leaves the initial interrupt callbacks idle until the
+game installs `0x06004632/0x06004744`, restores the mask API slots at
 `0x06000340/344`, selects battery-backed channel 4, and restores the
 `0x06000640/644/648` backup probe/access/mark callbacks. The interleaved word
 access uses the existing clean `0x06001412` replacement. The profile exposes
-the clean game handoff at `0x04401700`. Use it
+the clean game handoff at `0x04401700`. Shienryu's `SSHOFF`, vector-`0x94`,
+`SSHON` sequence now starts its Slave SH-2 renderer at `0x0600407A`; that CPU
+builds and double-buffers the VDP1 aircraft command list. Use the profile
 only with `trampoline-shienryu-run.bin`; Baku's callback and handoff constants
 remain isolated in the default image.

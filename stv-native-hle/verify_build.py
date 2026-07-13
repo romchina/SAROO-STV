@@ -36,6 +36,10 @@ def main() -> int:
         "stv_handler_table_update": 0x04400A40,
         "stv_resident_mask_set": 0x04400B00,
         "stv_resident_mask_update": 0x04400B20,
+        "stv_resident_vblank_out": 0x0440095E,
+        "stv_resident_dma0_irq": 0x04400964,
+        "stv_resident_vdp1_end_irq": 0x0440096A,
+        "stv_resident_queue_pop_alt": 0x04400B94,
         "stv_resident_clock_dispatch": 0x04400B40,
         "stv_resident_queue_pop": 0x04400B60,
         "stv_resident_system_flag": 0x04400BA0,
@@ -84,7 +88,8 @@ def main() -> int:
 
     raw = elf.with_suffix(".bin").read_bytes()
     if profile == "shienryu":
-        for value in (0x06004632, 0x06004744, 0x06004010,
+        for value in (0x06004010,
+                      0x25FE00A0, 0xFFFF7FFE,
                       0x0600061C, 0x06000620, 0x06000624,
                       0x06000640, 0x06000644, 0x06000648,
                       0x06000650, 0x06000653, 0x20180000,
@@ -103,7 +108,9 @@ def main() -> int:
                   required["stv_long_copy_reloc"],
                   required["stv_memmove_reloc"], 0x06000100,
                   0x06000300, 0x06000304, 0x06000310, 0x06000314,
-                  0x06000340, 0x06000344,
+                  0x06000340, 0x06000348,
+                  0x06000240, 0x32524459,
+                  0x06000600, 0xD0016002, 0x402B0009, 0x06000250,
                   0x06000610, 0x0600063C, 0x06000660,
                   0x06000A00, 0x06000B80, 0xDEADE001,
                   0x25807020, 0x25807022, 0x25807024,
@@ -120,9 +127,15 @@ def main() -> int:
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
 
-    callback = 0x06004632 if profile == "shienryu" else 0x06035278
-    if callback.to_bytes(4, "big") not in raw:
-        raise SystemExit(f"profile callback absent: {callback:#010x}")
+    if profile == "shienryu":
+        for callback in (0x06004632, 0x06004744):
+            if callback.to_bytes(4, "big") in raw:
+                raise SystemExit(
+                    f"premature Shienryu callback literal present: {callback:#010x}")
+    else:
+        callback = 0x06035278
+        if callback.to_bytes(4, "big") not in raw:
+            raise SystemExit(f"profile callback absent: {callback:#010x}")
 
     for value in (0x060FFFDC, 0x060D28C8, 0x06010660, 0xFF79A6F1,
                   0x00000120, 0x20180108, 0x45A07058,
@@ -176,6 +189,16 @@ def main() -> int:
     )
     if raw[veneer_offset:veneer_offset + len(veneer_table)] != veneer_table:
         raise SystemExit("resident veneer metadata mismatch")
+
+    # The fixed-size vector setter ends with the Saturn mask-BIOS Slave SH-2
+    # ready word and its 12-byte indirect jump bootstrap.  Keep the block
+    # exact: Shienryu depends on it before issuing SMPC SSHON.
+    slave_contract = b"".join(value.to_bytes(4, "big") for value in (
+        0x06000240, 0x32524459, 0x06000600,
+        0xD0016002, 0x402B0009, 0x06000250,
+    ))
+    if raw[0xC68:0xC80] != slave_contract:
+        raise SystemExit("Slave SH-2 startup contract mismatch")
 
     for opcode in (0xD007, 0xD006, 0x402B, 0x0009):
         if opcode.to_bytes(2, "big") not in raw[0xE00:0xF00]:

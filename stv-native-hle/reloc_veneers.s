@@ -632,6 +632,15 @@ resident_exception_loop:
     mov.l   resident_vblank_vector, r1
     mov.l   resident_vblank_ptr, r0
     mov.l   r0, @r1
+    add     #4, r1
+    add     #6, r0
+    mov.l   r0, @r1
+    add     #0x28, r1
+    add     #6, r0
+    mov.l   r0, @r1
+    add     #8, r1
+    add     #6, r0
+    mov.l   r0, @r1
 
     ! Native service/callback seam used by the verified game vblank handler.
     mov.l   resident_service_610, r1
@@ -703,8 +712,12 @@ resident_channel_address_ptr: .long stv_channel_address
 resident_copy_20_ptr:     .long stv_resident_copy_20
 resident_noop_ptr:        .long stv_resident_noop
     .ifdef SHIENRYU_PROFILE
-resident_game_vblank:     .long 0x06004632
-resident_game_aux:        .long 0x06004744
+    ! At the measured 0x06004010 handoff these table entries still point at
+    ! the BIOS default handler.  Shienryu installs 0x06004632/0x06004744
+    ! later through the 0x06000300 handler API, after its video/state tables
+    ! are ready.  Calling either one early corrupts TVMD and loses VBLANK-IN.
+resident_game_vblank:     .long stv_resident_noop
+resident_game_aux:        .long stv_resident_noop
     .else
 resident_game_vblank:     .long 0x06035278
 resident_game_aux:        .long 0x06035C48
@@ -777,8 +790,30 @@ stv_resident_noop:
 
     .global stv_resident_vblank
 stv_resident_vblank:
-    sts.l   pr, @-r15
     mov.l   r0, @-r15
+    bra     resident_scu_irq_dispatch
+    mov     #0x40, r0
+
+    .global stv_resident_vblank_out
+stv_resident_vblank_out:
+    mov.l   r0, @-r15
+    bra     resident_scu_irq_dispatch
+    mov     #0x41, r0
+
+    .global stv_resident_dma0_irq
+stv_resident_dma0_irq:
+    mov.l   r0, @-r15
+    bra     resident_scu_irq_dispatch
+    mov     #0x4B, r0
+
+    .global stv_resident_vdp1_end_irq
+stv_resident_vdp1_end_irq:
+    mov.l   r0, @-r15
+    bra     resident_scu_irq_dispatch
+    mov     #0x4D, r0
+
+resident_scu_irq_dispatch:
+    sts.l   pr, @-r15
     mov.l   r1, @-r15
     mov.l   r2, @-r15
     mov.l   r3, @-r15
@@ -786,16 +821,50 @@ stv_resident_vblank:
     mov.l   r5, @-r15
     mov.l   r6, @-r15
     mov.l   r7, @-r15
+    mov     r0, r7
+    cmp/eq  #0x40, r0
+    bf      resident_scu_irq_lookup
+    mov.l   r7, @-r15
     mov.l   resident_input_poll_ptr, r0
     jsr     @r0
     nop
-    mov.l   resident_handler_a00_irq, r0
-    mov.l   @r0, r0
+    mov.l   @r15+, r7
+resident_scu_irq_lookup:
+    ! Match the BIOS common dispatcher by masking the active SCU source for
+    ! the duration of its callback.  Vectors 0x40..0x4F map directly to IMS
+    ! bits 0..15.  Without this guard VDP1 END can recursively retrigger while
+    ! its handler submits the next command list.
+    mov     #1, r4
+    mov     r7, r6
+    add     #-0x40, r6
+    tst     r6, r6
+    bt      resident_scu_mask_ready
+resident_scu_mask_loop:
+    shll    r4
+    dt      r6
+    bf      resident_scu_mask_loop
+resident_scu_mask_ready:
+    mov.l   resident_mask_shadow_irq, r1
+    mov.l   @r1, r2
+    mov.l   r2, @-r15
+    or      r4, r2
+    mov.l   r2, @r1
+    mov.l   resident_scu_ims_irq, r3
+    mov.l   r2, @r3
+
+    mov.l   resident_handler_table_irq, r0
+    shll2   r7
+    mov.l   @(r0, r7), r0
     tst     r0, r0
-    bt      resident_vblank_restore
+    bt      resident_scu_irq_restore
     jsr     @r0
     nop
-resident_vblank_restore:
+resident_scu_irq_restore:
+    mov.l   resident_scu_ims_irq, r3
+    mov.l   resident_mask_shadow_irq, r1
+    mov.l   @r15+, r2
+    mov.l   r2, @r1
+    mov.l   r2, @r3
     mov.l   @r15+, r7
     mov.l   @r15+, r6
     mov.l   @r15+, r5
@@ -803,8 +872,8 @@ resident_vblank_restore:
     mov.l   @r15+, r3
     mov.l   @r15+, r2
     mov.l   @r15+, r1
-    mov.l   @r15+, r0
     lds.l   @r15+, pr
+    mov.l   @r15+, r0
     rte
     nop
 
@@ -812,8 +881,10 @@ resident_vblank_restore:
 resident_diag_ptr:          .long 0x06000BFC
 resident_crash_ptr:         .long 0x06000B80
 resident_exception_diag:    .long 0xDEADE001
-resident_handler_a00_irq:   .long 0x06000A00
+resident_handler_table_irq: .long 0x06000900
 resident_input_poll_ptr:    .long stv_resident_input_poll
+resident_mask_shadow_irq:   .long 0x06000348
+resident_scu_ims_irq:       .long 0x25FE00A0
 
 ! Non-returning clean equivalent of the BIOS bootstrap transition at 0x4114.
 ! The trampoline has already copied the FPR image, so record the observable
@@ -903,10 +974,16 @@ resident_clock_native: .long stv_vblank_clock_update
     .org 0xB60, 0
     .global stv_resident_queue_pop
 stv_resident_queue_pop:
+    mov     #0x5E, r6
+    mov     #0x70, r7
+    bra     resident_queue_pop_common
+    nop
+
+resident_queue_pop_common:
     mov.l   resident_queue_base, r5
-    mov     #0x5E, r0
+    mov     r6, r0
     mov.b   @(r0, r5), r4
-    mov     #0x5F, r0
+    add     #1, r0
     mov.b   @(r0, r5), r3
     cmp/eq  r3, r4
     bf      resident_queue_available
@@ -916,16 +993,23 @@ resident_queue_available:
     mov     r4, r0
     add     #1, r0
     and     #0x0F, r0
-    mov     #0x5E, r1
+    mov     r6, r1
     add     r5, r1
     mov.b   r0, @r1
-    mov     r5, r0
-    add     #0x70, r0
+    mov     r7, r0
+    add     r5, r0
     mov.b   @(r0, r4), r0
     rts
     nop
     .align 2
 resident_queue_base: .long 0x06000700
+
+    .global stv_resident_queue_pop_alt
+stv_resident_queue_pop_alt:
+    mov     #0x5C, r6
+    mov     #0x60, r7
+    bra     resident_queue_pop_common
+    nop
 
     .org 0xBA0, 0
     .global stv_resident_system_flag
@@ -1008,10 +1092,33 @@ resident_vector_value_ready:
     stc     vbr, r0
     shll2   r4
     mov.l   r5, @(r0, r4)
+
+    ! Saturn's Slave SH-2 mask-BIOS waits for the shared "2RDY" word before
+    ! entering the 0x06000600 master-supplied bootstrap.  The original BIOS
+    ! vector service refreshed both pieces whenever it installed a slave
+    ! entry (Shienryu uses vector 0x94, then issues SMPC SSHON).  Recreate the
+    ! same generic contract here; 0x06000600..0x0600060B is the unused gap
+    ! immediately before the resident service pointer table.
+    mov.l   resident_slave_ready_ptr, r1
+    mov.l   resident_slave_ready, r2
+    mov.l   r2, @r1
+    mov.l   resident_slave_boot_ptr, r1
+    mov.l   resident_slave_boot_0, r2
+    mov.l   r2, @r1
+    mov.l   resident_slave_boot_1, r2
+    mov.l   r2, @(4, r1)
+    mov.l   resident_slave_vector_ptr, r2
+    mov.l   r2, @(8, r1)
     rts
     nop
     .align 2
 resident_irq_default: .long stv_resident_irq_return
+resident_slave_ready_ptr:  .long 0x06000240
+resident_slave_ready:      .long 0x32524459
+resident_slave_boot_ptr:   .long 0x06000600
+resident_slave_boot_0:     .long 0xD0016002
+resident_slave_boot_1:     .long 0x402B0009
+resident_slave_vector_ptr: .long 0x06000250
 
     .org 0xC80, 0
     .global stv_resident_handler_set
@@ -1807,6 +1914,13 @@ stv_shienryu_handoff:
     ldc     r0, vbr
     mov.l   shien_handoff_gbr, r0
     ldc     r0, gbr
+    ! Restore Shienryu's measured SCU interrupt mask before opening SR.
+    ! Leaving the cold-init 0xFFFFFFFF mask installed suppresses VBLANK-IN,
+    ! freezes the game clock, and prevents VDP1 aircraft commands from being
+    ! submitted even though the VDP2 playfield remains visible.
+    mov.l   shien_handoff_scu_ims_ptr, r1
+    mov.l   shien_handoff_scu_ims_value, r0
+    mov.l   r0, @r1
     mov     #1, r0
     ldc     r0, sr
     mov.l   shien_handoff_stack, r15
@@ -1821,6 +1935,8 @@ shien_handoff_gbr:   .long 0xFFFFFE00
 shien_handoff_stack: .long 0x06100000
 shien_handoff_pr:    .long 0x00004516
 shien_handoff_entry: .long 0x06004010
+shien_handoff_scu_ims_ptr:   .long 0x25FE00A0
+shien_handoff_scu_ims_value: .long 0xFFFF7FFE
 
     .org 0x1740, 0
     .global stv_shienryu_profile_init
@@ -1828,9 +1944,25 @@ stv_shienryu_profile_init:
     mov.l   shien_slot_340, r1
     mov.l   shien_mask_set, r0
     mov.l   r0, @r1
-    mov.l   shien_slot_344, r1
+    add     #4, r1
     mov.l   shien_mask_update, r0
     mov.l   r0, @r1
+    ! 0x06000348 overlaps the VBR page and was filled with the default
+    ! exception target by stv_resident_init.  It is data, not a vector: the
+    ! resident 0xC0A service treats it as the SCU IMS shadow.  Seed the value
+    ! measured at Shienryu's BIOS handoff so its first two updates produce
+    ! 0xFFFF77FE and 0xFFFF57FC instead of masking VBLANK-IN.
+    mov.l   shien_mask_shadow, r1
+    mov.l   shien_mask_initial, r0
+    mov.l   r0, @r1
+    ! The VBLANK-OUT callback consumes the two resident event queues through
+    ! slots 0x668 and 0x670.  The native queue implementations are 0x34 bytes
+    ! apart, so install both without spending another literal-pool entry.
+    mov.l   shien_slot_668, r1
+    mov.l   shien_queue_pop_ptr, r0
+    mov.l   r0, @r1
+    add     #0x34, r0
+    mov.l   r0, @(8, r1)
     .ifdef SHIENRYU_PROFILE
     mov.l   shien_slot_640, r1
     mov.l   shien_backup_probe_ptr, r0
@@ -1862,9 +1994,12 @@ stv_shienryu_profile_init:
     nop
     .align 2
 shien_slot_340:    .long 0x06000340
-shien_slot_344:    .long 0x06000344
+shien_mask_shadow: .long 0x06000348
+shien_mask_initial:.long 0xFFFF7FFE
 shien_mask_set:    .long 0x06000C00
 shien_mask_update: .long 0x06000C0A
+shien_slot_668:    .long 0x06000668
+shien_queue_pop_ptr:.long stv_resident_queue_pop
     .ifdef SHIENRYU_PROFILE
 shien_slot_640:    .long 0x06000640
 shien_slot_644:    .long 0x06000644
