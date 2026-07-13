@@ -24,3 +24,12 @@ if ($OutputDirectory) {
 
 & wsl -- bash -lc 'cd "$1"; shift; exec bash tools/stv/verify_virtual.sh "$@"' bash $wslRepo @scriptArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$uv4 = 'C:\Keil_v5\UV4\UV4.exe'
+$quartus = 'C:\altera_lite\25.1std\quartus\bin64\quartus_sh.exe'
+if ((Test-Path $uv4) -and (Test-Path $quartus)) {
+    & (Join-Path $PSScriptRoot 'verify_vendor.ps1')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    Write-Host "`nVendor acceptance skipped (Keil and/or Quartus not installed)."
+}

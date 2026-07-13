@@ -3,3 +3,6 @@
 /*.uvguix*
 /*.bak
 /JLinkLog.txt
+/keil-build.log
+/DebugConfig/*.dbgconf
+/RTE/Device/**/*.dbgconf*

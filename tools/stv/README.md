@@ -62,3 +62,13 @@ Saturn menu firmware build, the MCU loader, FPGA mapping, native HLE layout,
 and both trampoline variants. When
 the local Yabause twin exists at `/root/yabause-stv`, it also executes native
 SH-2 asynchronous SMPC smoke tests for idle and synthetic pressed-pad vectors.
+
+When Keil MDK is installed at `C:\Keil_v5` and Quartus Prime Lite 25.1 at
+`C:\altera_lite\25.1std`, the PowerShell wrapper also runs the vendor
+acceptance automatically: a clean ARMCLANG MCU rebuild followed by a complete
+Quartus Analysis & Synthesis, Fitter, Assembler, and TimeQuest flow. Run that
+part alone with:
+
+```powershell
+.\tools\stv\verify_vendor.ps1
+```

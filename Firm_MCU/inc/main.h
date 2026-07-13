@@ -18,7 +18,15 @@ typedef long long s64;
 
 
 #define in_isr()        __get_IPSR()
-#define disable_irq()   __disable_irq()
+
+static __inline u32 disable_irq_save(void)
+{
+	u32 primask = __get_PRIMASK();
+	__disable_irq();
+	return primask;
+}
+
+#define disable_irq()   disable_irq_save()
 #define restore_irq(pm) __set_PRIMASK(pm)
 
 #define NOTHING()    __asm volatile("")

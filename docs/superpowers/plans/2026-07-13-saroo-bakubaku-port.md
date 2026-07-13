@@ -30,10 +30,14 @@
 - [x] 菜单新增 `/SAROO/STV/*.bin` 列表和 load 命令，成功后发 SMPC `SYSRES`。
 - [x] 把 `stv_rom.c` / `stv_menu.c` 加入 Keil 工程。
 - [x] MCU host tests、FPGA iverilog、Saturn menu、Phase-1 trampoline 构建通过。
-- [ ] 用 ARMCLANG/Keil 完整构建 MCU firmware。
+- [x] 用 Keil MDK 5.43 / ARMCLANG 6.24 clean rebuild MCU firmware；产物代码
+      45,188 bytes，0 errors / 0 warnings。
 - [x] 用 GNU SH-2 工具链完整构建 384 KiB Saturn menu firmware；修正工具前缀、
       SH-2 big-endian 汇编参数、启动入口 4-byte 对齐和旧头文件声明冲突。
-- [ ] Quartus 综合、烧写和真机 magenta/heartbeat 验证。
+- [x] Quartus Prime Lite 25.1 完成 Cyclone IV 全综合、Fitter、Assembler、
+      TimeQuest 和 JIC 生成；0 errors，最差 setup `+0.402 ns`、hold
+      `+0.160 ns`。
+- [ ] 烧写和真机 magenta/heartbeat 验证。
 
 ## Phase-2 建议内存图
 
@@ -99,8 +103,9 @@ source `+0x01000000` veneer，详见 address-ceiling recon。
   SNDOFF→SNDON 重启声音 CPU；动态 smoke 验证 `03/07/06` 三条 SMPC 命令。
 - [x] 一键虚拟验收纳入 Saturn menu clean build，并校验 `ramimage.bin` 固定为
   384 KiB；当前可用开源工具覆盖的构建、静态检查和动态模拟均已闭合。
-- [ ] 安装 Quartus 14/Keil 后完成 vendor build；真机可用时验证 overlay 关闭、
-  heartbeat、视频/声音和物理手柄。当前主机未安装这两套专有工具链。
+- [x] 安装 Keil MDK 5.43、ARMCLANG 6.24、STM32H7 DFP 与 Quartus Prime Lite
+  25.1 Cyclone IV 支持；MCU/FPGA vendor build 均通过并接入一键验收。
+- [ ] 真机可用时验证 overlay 关闭、heartbeat、视频/声音和物理手柄。
 
 ## 第一真机验收步骤
 
