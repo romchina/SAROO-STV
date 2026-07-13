@@ -27,7 +27,7 @@ def verify(image_path: Path, manifest_path: Path, overlay_path: Path,
 
     if len(image) != IMAGE_SIZE:
         raise ValueError(f"image size {len(image):#x}, expected {IMAGE_SIZE:#x}")
-    if manifest.get("format") != "saroo-stv-cart-v1":
+    if manifest.get("format") not in {"saroo-stv-cart-v1", "saroo-stv-cart-v2"}:
         raise ValueError("unexpected manifest format")
     if manifest.get("image_size") != IMAGE_SIZE:
         raise ValueError("manifest image size mismatch")

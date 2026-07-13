@@ -1,5 +1,8 @@
 # Baku Baku ROM packer
 
+Game layouts are descriptor-driven under `tools/stv/games/`. The compatibility
+wrapper below still produces the byte-identical Baku Baku hardware image:
+
 Build a deterministic 32 MB SAROO-STV cart image from the five extracted,
 legally obtained Baku Baku IC dumps:
 
@@ -24,6 +27,20 @@ trampoline at image offset 31 MB, and writes a JSON manifest next
 to the image. The optional native HLE module is placed at image offset 20 MB,
 visible through CS1 at Saturn address `0x04400000`.
 ROM files and generated images must not be committed.
+
+The second descriptor, `shienryu.json`, records the official MAME cart layout
+and 128-byte EEPROM dependency. It can currently build and test a ROM-only
+layout image with the generic entry point:
+
+```text
+python tools/stv/pack_game.py tools/stv/games/shienryu.json \
+  ROM_DIRECTORY shienryu-layout.bin
+```
+
+Its status is deliberately `layout-only`: the packer refuses to embed the
+Baku-specific trampoline/HLE unless the development-only override is supplied.
+Shienryu still needs its own handoff/runtime trace and 93C46 persistence before
+it becomes a hardware candidate.
 
 Copy the generated 32 MB `.bin` files to `/SAROO/STV/` on the SD card. Do not
 copy `trampoline.bin` by itself. No ST-V BIOS file is used by either image.

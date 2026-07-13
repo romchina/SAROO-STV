@@ -1,0 +1,42 @@
+{
+  "format": "saroo-stv-game-v1",
+  "game": "shienryu",
+  "title": "Shienryu (JUET 961226 V1.000)",
+  "port_status": "layout-only",
+  "image_size": 33554432,
+  "roms": [
+    {
+      "name": "mpr19631.7",
+      "size": 2097152,
+      "sha1": "3b14b7fdebd4817da32ea374c15a38c695ffeff1",
+      "operations": [{"type": "word_swap", "offset": 2097152}]
+    },
+    {
+      "name": "mpr19632.2",
+      "size": 4194304,
+      "sha1": "f953bde91805b97b60d2ab9270f9d2933e064d95",
+      "operations": [{"type": "word_swap", "offset": 4194304}]
+    },
+    {
+      "name": "mpr19633.3",
+      "size": 4194304,
+      "sha1": "97861d09e10ce5d2b10bf5559574b3f489e28077",
+      "operations": [{"type": "word_swap", "offset": 8388608}]
+    }
+  ],
+  "auxiliary": [
+    {
+      "name": "eeprom-shienryu.bin",
+      "kind": "93c46-eeprom",
+      "size": 128,
+      "sha1": "e78545e8f62d19f8e00197c62ff0e56f6c85e355",
+      "implemented": false
+    }
+  ],
+  "required_relocation": null,
+  "blockers": [
+    "capture game handoff and runtime BIOS-service trace",
+    "implement Shienryu trampoline/resident profile",
+    "implement 93C46 EEPROM persistence"
+  ]
+}

@@ -27,7 +27,7 @@ foreach($image in $images) {
         throw "Packed-image manifest is missing: $manifest"
     }
     $metadata = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
-    if($metadata.format -ne 'saroo-stv-cart-v1' -or
+    if($metadata.format -notin @('saroo-stv-cart-v1', 'saroo-stv-cart-v2') -or
        [uint64]$metadata.image_size -ne [uint64]$item.Length) {
         throw "Invalid SAROO-STV manifest: $manifest"
     }
