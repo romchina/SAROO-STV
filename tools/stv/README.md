@@ -63,6 +63,11 @@ and both trampoline variants. When
 the local Yabause twin exists at `/root/yabause-stv`, it also executes native
 SH-2 asynchronous SMPC smoke tests for idle and synthetic pressed-pad vectors.
 
+GitHub Actions runs the same script with `--ci`. That mode skips only the
+Saturn menu C build because Ubuntu does not package an SH-2 GCC; Python tests,
+MCU host tests, the FMC/FPGA simulation, and both binutils-only SH-2 modules
+still run. The full local command remains the release acceptance path.
+
 When Keil MDK is installed at `C:\Keil_v5` and Quartus Prime Lite 25.1 at
 `C:\altera_lite\25.1std`, the PowerShell wrapper also runs the vendor
 acceptance automatically: a clean ARMCLANG MCU rebuild followed by a complete
@@ -72,3 +77,10 @@ part alone with:
 ```powershell
 .\tools\stv\verify_vendor.ps1
 ```
+
+## Hardware bring-up helpers
+
+PowerShell helpers for SD deployment, UART capture, J-Link MCU programming,
+and USB-Blaster FPGA programming live beside this README. See
+`docs/STV-HARDWARE-BRINGUP.md` for the exact workflow and the important
+Saturn-HWRAM/J-Link boundary.

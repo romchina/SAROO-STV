@@ -33,7 +33,7 @@ module tb_cs0_rom;
     wire [ 1:0] SD_BA, SD_DQM;
     wire [15:0] SD_DQ;
 
-    // ---------- STM32 FSMC stubs (idle) ----------
+    // ---------- STM32 FSMC stimulus ----------
     reg ST_CLK = 0, ST_CS = 1, ST_RD = 1, ST_WR = 1;
     reg ST_ALE = 0, ST_BL0 = 1, ST_BL1 = 1;
     reg  [ 7:0] ST_ADDR = 0;
@@ -79,6 +79,75 @@ module tb_cs0_rom;
 
     // ---------- helpers ----------
     integer fail_count = 0;
+
+    // STM32 FMC address/data-multiplexed 16-bit transaction.  The FPGA
+    // latches {ST_ADDR, ST_AD, 1'b0} on ALE, then samples/drives ST_AD while
+    // WR/RD is active. Addresses below 0x01000000 select registers; setting
+    // bit 24 selects the raw SDRAM aperture.
+    task fsmc_write16;
+        input [24:0] addr;
+        input [15:0] value;
+        integer k;
+        begin
+            @(negedge CLK_50M);
+            ST_ADDR   = addr[24:17];
+            st_ad_drv = addr[16:1];
+            ST_CS     = 1'b0;
+            ST_RD     = 1'b1;
+            ST_WR     = 1'b1;
+            ST_BL0    = 1'b0;
+            ST_BL1    = 1'b0;
+            ST_ALE    = 1'b1;
+            @(negedge CLK_50M);
+            ST_ALE    = 1'b0;
+            st_ad_drv = value;
+            ST_WR     = 1'b0;
+
+            // Register writes finish as soon as ale_ack crosses mclk. SDRAM
+            // writes additionally use ST_WAIT; allow enough clocks for both.
+            k = 0;
+            while(ST_WAIT !== 1'b1 && k < 200) begin
+                @(posedge CLK_50M);
+                k = k + 1;
+            end
+            repeat(4) @(posedge CLK_50M);
+            ST_WR     = 1'b1;
+            ST_CS     = 1'b1;
+            ST_BL0    = 1'b1;
+            ST_BL1    = 1'b1;
+            st_ad_drv = 16'hzzzz;
+            repeat(4) @(posedge CLK_50M);
+        end
+    endtask
+
+    task fsmc_read16;
+        input  [24:0] addr;
+        output [15:0] data;
+        integer k;
+        begin
+            @(negedge CLK_50M);
+            ST_ADDR   = addr[24:17];
+            st_ad_drv = addr[16:1];
+            ST_CS     = 1'b0;
+            ST_WR     = 1'b1;
+            ST_RD     = 1'b1;
+            ST_ALE    = 1'b1;
+            @(negedge CLK_50M);
+            ST_ALE    = 1'b0;
+            st_ad_drv = 16'hzzzz;
+            ST_RD     = 1'b0;
+            k = 0;
+            while(ST_WAIT !== 1'b1 && k < 200) begin
+                @(posedge CLK_50M);
+                k = k + 1;
+            end
+            repeat(4) @(posedge CLK_50M);
+            data = ST_AD;
+            ST_RD = 1'b1;
+            ST_CS = 1'b1;
+            repeat(4) @(posedge CLK_50M);
+        end
+    endtask
 
     // Saturn-side write cycle (both byte enables active).
     task ss_write16;
@@ -176,7 +245,7 @@ module tb_cs0_rom;
     endtask
 
     task check_eq16;
-        input [127:0] label;
+        input [511:0] label;
         input [15:0]  actual;
         input [15:0]  expected;
         begin
@@ -230,14 +299,17 @@ module tb_cs0_rom;
         check_eq16("IOGA idle F/D", got, 16'hFFFC);
         ss_read_cs2_reg16(24'h007026, got);
         check_eq16("IOGA idle G/mode", got, 16'hFF00);
-        force dut.st_ioga_ab = 16'h7EBD;
-        force dut.st_ioga_ce = 16'hEEDF;
+        // Drive the MCU side of the real multiplexed bus instead of forcing
+        // internal FPGA registers.
+        fsmc_write16(25'h0000036, 16'h7EBD);
+        fsmc_write16(25'h0000038, 16'hEEDF);
         ss_read_cs2_reg16(24'h007020, got);
         check_eq16("IOGA injected A/B", got, 16'h7EBD);
         ss_read_cs2_reg16(24'h007022, got);
         check_eq16("IOGA injected C/E", got, 16'hEEDF);
-        release dut.st_ioga_ab;
-        release dut.st_ioga_ce;
+
+        fsmc_read16(25'h0000036, got);
+        check_eq16("FSMC register readback IOGA A/B", got, 16'h7EBD);
 
         // STM32 sees SDRAM through a 16 MB aperture. Register 0x32 supplies
         // the two high address bits so a streaming loader can reach 64 MB.
@@ -261,6 +333,37 @@ module tb_cs0_rom;
         release dut.st_sdram_bank;
         release dut.fsmc_addr;
         repeat(4) @(posedge CLK_50M);
+
+        // End-to-end MCU-loader seam: write representative words at the
+        // production 4 MB SDRAM reserve through the 16 MB FMC aperture, then
+        // consume them through Saturn CS0/CS1.  Bank 1 represents image data
+        // beyond the first 16 MB (physical SDRAM offset 20 MB here).
+        fsmc_write16(25'h0000032, 16'h0000);       // physical bank 0
+        fsmc_write16(25'h1400100, 16'h4553);       // 4 MB + 0x100, "SE"
+        fsmc_write16(25'h0000032, 16'h0001);       // physical bank 1
+        fsmc_write16(25'h1400200, 16'h3412);       // 20 MB + 0x200
+        fsmc_write16(25'h0000030, 16'h0004);       // ROM base = 4 MB
+        fsmc_write16(25'h0000034, 16'h0001);       // boot overlay enabled
+        fsmc_write16(25'h0000004, 16'h0c00);       // ST-V ROM + CS1
+
+        fsmc_read16(25'h0000030, got);
+        check_eq16("FSMC ROM base readback", got, 16'h0004);
+        fsmc_read16(25'h0000032, got);
+        check_eq16("FSMC SDRAM bank readback", got, 16'h0001);
+        fsmc_read16(25'h0000034, got);
+        check_eq16("FSMC overlay readback", got, 16'h0001);
+
+        // Overlay must be disabled before CS0 exposes the original image.
+        fsmc_write16(25'h0000034, 16'h0000);
+        ss_read16(24'h000100, got);
+        check_eq16("FSMC bank0 write -> Saturn CS0", got, 16'h5345);
+        ss_read_cs1_16(24'h000200, got);
+        check_eq16("FSMC bank1 write -> Saturn CS1", got, 16'h1234);
+
+        // Return to the reset mapping before the legacy CS0 fixture checks.
+        fsmc_write16(25'h0000004, 16'h0000);
+        fsmc_write16(25'h0000030, 16'h0000);
+        fsmc_write16(25'h0000032, 16'h0000);
 
         // Current SAROO PCBs do not route Saturn AA24.  ST-V mode uses
         // CS1 as the image's 16 MB+ window instead.  Verify that this is

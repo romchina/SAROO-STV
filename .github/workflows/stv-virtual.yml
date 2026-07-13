@@ -1,0 +1,36 @@
+name: ST-V virtual acceptance
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  open-source-acceptance:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install open-source toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+            build-essential python3 iverilog binutils-sh-elf
+
+      - name: Run hardware-independent acceptance
+        run: bash tools/stv/verify_virtual.sh --ci
+
+      - name: Upload FPGA waveform on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stv-fpga-waveform
+          path: FPGA/sim/*.vcd
+          if-no-files-found: ignore

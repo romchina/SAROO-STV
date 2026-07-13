@@ -57,5 +57,7 @@ wsl -- bash -c 'cd /mnt/c/Users/mixio/Documents/GitHub/SAROO-STV/FPGA/sim && bas
 - PLL is pass-through; real mainpll generates 100 MHz mclk from 50 MHz. Any clock-ratio-sensitive bug will NOT reproduce here.
 - SDRAM model is behavioral, not timing-accurate. CAS latency,
   bank precharge timing, refresh cycles are NOT enforced.
-- STM32 FSMC is idle in these testbenches — FSMC-path bugs need
-  real hardware or a dedicated FSMC-driver testbench.
+- The testbench now drives representative STM32 FMC register and SDRAM
+  transactions, including the production 4 MB reserve and a cross-16 MB bank
+  write. It does not simulate the STM32 FMC peripheral's exact pad timing;
+  electrical timing and signal-integrity failures still require real hardware.

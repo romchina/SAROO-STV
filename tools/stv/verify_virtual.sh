@@ -4,19 +4,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROM_DIR=""
 OUTPUT_DIR="$ROOT/out/stv"
+CI_MODE=0
 
 usage() {
     cat <<'EOF'
-Usage: bash tools/stv/verify_virtual.sh [--rom-dir DIR] [--output-dir DIR]
+Usage: bash tools/stv/verify_virtual.sh [--ci] [--rom-dir DIR] [--output-dir DIR]
 
 Runs every hardware-independent SAROO-STV check.  With --rom-dir, also builds
 and verifies the diagnostic and game-entry 32 MB Baku Baku images.
+
+--ci skips the Saturn menu C build because Ubuntu does not package an SH-2
+GCC; all binutils-only SH-2 images and other open-source checks still run.
 EOF
 }
 
 while (($#)); do
     case "$1" in
         "") shift ;;
+        --ci) CI_MODE=1; shift ;;
         --rom-dir) ROM_DIR="$2"; shift 2 ;;
         --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -26,8 +31,12 @@ done
 
 cd "$ROOT"
 
-for tool in python3 make gcc iverilog vvp sh-elf-gcc sh-elf-as sh-elf-ld \
-    sh-elf-objcopy sh-elf-objdump sh-elf-nm; do
+required_tools=(python3 make gcc iverilog vvp sh-elf-as sh-elf-ld \
+    sh-elf-objcopy sh-elf-objdump sh-elf-nm)
+if [[ "$CI_MODE" -eq 0 ]]; then
+    required_tools+=(sh-elf-gcc)
+fi
+for tool in "${required_tools[@]}"; do
     command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 2; }
 done
 
@@ -39,14 +48,18 @@ python3 -m unittest discover -s tools/stv/tests -v
 step "vendor project source membership"
 python3 tools/stv/verify_vendor_projects.py
 
-step "Saturn menu firmware clean build"
-make -C Firm_Saturn clean all
-test "$(wc -c < Firm_Saturn/ramimage.bin)" -eq 393216
+if [[ "$CI_MODE" -eq 0 ]]; then
+    step "Saturn menu firmware clean build"
+    make -C Firm_Saturn clean all
+    test "$(wc -c < Firm_Saturn/ramimage.bin)" -eq 393216
+else
+    step "Saturn menu firmware skipped (Ubuntu has no packaged SH-2 GCC)"
+fi
 
 step "MCU streaming-loader host tests"
 make -C Firm_MCU/tests clean test
 
-step "FPGA CS0/CS1/overlay simulation"
+step "FPGA FMC/CS0/CS1/overlay simulation"
 bash FPGA/sim/run_sim.sh tb_cs0_rom
 
 step "native SH-2 HLE clean build and layout verification"
