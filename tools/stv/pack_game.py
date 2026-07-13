@@ -29,6 +29,19 @@ def load_descriptor(path: Path) -> dict[str, Any]:
         raise ValueError("descriptor image size must be 32 MB")
     if not descriptor.get("game") or not descriptor.get("roms"):
         raise ValueError("descriptor requires game and ROM entries")
+    profile = descriptor.get("boot_profile")
+    if profile is not None:
+        source = int(profile["source_image_offset"])
+        destination = int(profile["destination"], 0)
+        length = int(profile["length"])
+        entry = int(profile["entry"], 0)
+        if source < 0 or length <= 0 or source + length > IMAGE_SIZE:
+            raise ValueError("boot profile source range exceeds image")
+        if (destination < 0x06000000
+                or destination + length > 0x06100000):
+            raise ValueError("boot profile destination range exceeds HWRAM")
+        if not destination <= entry < destination + length:
+            raise ValueError("boot profile entry is outside copied program")
     return descriptor
 
 
@@ -161,6 +174,9 @@ def build_image(descriptor: dict[str, Any], directory: Path,
              "image_offset": "0x01000000", "size": "0x01000000"},
         ],
         "required_relocation": descriptor.get("required_relocation"),
+        "boot_profile": descriptor.get("boot_profile"),
+        "resident_profile": descriptor.get("resident_profile"),
+        "oracle": descriptor.get("oracle"),
     }
     return bytes(image), manifest
 

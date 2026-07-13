@@ -63,16 +63,26 @@ make -C Firm_MCU/tests clean test
 step "FPGA FMC/CS0/CS1/overlay simulation"
 bash FPGA/sim/run_sim.sh tb_cs0_rom
 
-step "native SH-2 HLE clean build and layout verification"
-make -C stv-native-hle clean stv-native-hle.bin
+step "Baku and Shienryu native SH-2 HLE verification"
+make -C stv-native-hle clean stv-native-hle.bin \
+    stv-native-hle-shienryu.bin
 python3 stv-native-hle/verify_build.py stv-native-hle/stv-native-hle.elf
+python3 stv-native-hle/verify_build.py \
+    stv-native-hle/stv-native-hle-shienryu.elf shienryu
 
-step "diagnostic and game-entry trampoline verification"
-make -C stv-trampoline clean trampoline.bin trampoline-run.bin
+step "Baku and Shienryu trampoline verification"
+make -C stv-trampoline clean trampoline.bin trampoline-run.bin \
+    trampoline-shienryu.bin trampoline-shienryu-run.bin
 python3 stv-trampoline/verify_build.py \
     stv-trampoline/trampoline.elf stv-trampoline/trampoline.bin
 python3 stv-trampoline/verify_build.py \
     stv-trampoline/trampoline-run.elf stv-trampoline/trampoline-run.bin
+python3 stv-trampoline/verify_build.py \
+    stv-trampoline/trampoline-shienryu.elf \
+    stv-trampoline/trampoline-shienryu.bin shienryu
+python3 stv-trampoline/verify_build.py \
+    stv-trampoline/trampoline-shienryu-run.elf \
+    stv-trampoline/trampoline-shienryu-run.bin shienryu-run
 python3 - <<'PY'
 from pathlib import Path
 run = Path("stv-trampoline/trampoline-run.bin").read_bytes()

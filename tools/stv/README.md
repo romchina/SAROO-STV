@@ -28,19 +28,33 @@ to the image. The optional native HLE module is placed at image offset 20 MB,
 visible through CS1 at Saturn address `0x04400000`.
 ROM files and generated images must not be committed.
 
-The second descriptor, `shienryu.json`, records the official MAME cart layout
-and 128-byte EEPROM dependency. It can currently build and test a ROM-only
-layout image with the generic entry point:
+The second descriptor, `shienryu.json`, records the official MAME cart layout,
+128-byte EEPROM dependency, and the Yabause-oracle boot profile. It can build
+and test a ROM-only layout image with the generic entry point:
 
 ```text
 python tools/stv/pack_game.py tools/stv/games/shienryu.json \
   ROM_DIRECTORY shienryu-layout.bin
 ```
 
-Its status is deliberately `layout-only`: the packer refuses to embed the
-Baku-specific trampoline/HLE unless the development-only override is supplied.
-Shienryu still needs its own handoff/runtime trace and 93C46 persistence before
-it becomes a hardware candidate.
+Its status is `clean-oracle-booted`: the native-HLE image reaches Shienryu's
+own backup-RAM initialization screen without executing ST-V BIOS, taking a
+Master SH-2 low-ROM edge, or raising an invalid opcode through frame 600. The measured boot
+copy is image `0x00200000..0x002F9000` to HWRAM
+`0x06003000..0x060FC000`, followed by entry at `0x06004010`. The packer still
+refuses to embed development modules unless the override is supplied.
+Shienryu now has descriptor-driven diagnostic and clean-run profiles, but still
+needs operator-setting persistence, reset-to-attract validation, and real SAROO
+electrical/timing validation before it becomes a hardware candidate.
+
+Given a 1 MB big-endian HWRAM dump captured after entry, quantify how much of
+the measured boot copy remains byte-identical and how much was changed at
+runtime:
+
+```text
+python tools/stv/analyze_boot_profile.py tools/stv/games/shienryu.json \
+  shienryu-layout.bin fs_hwram.bin
+```
 
 Copy the generated 32 MB `.bin` files to `/SAROO/STV/` on the SD card. Do not
 copy `trampoline.bin` by itself. No ST-V BIOS file is used by either image.

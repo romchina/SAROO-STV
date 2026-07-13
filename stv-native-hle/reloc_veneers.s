@@ -702,8 +702,13 @@ resident_clock_ptr:       .long stv_vblank_clock_update
 resident_channel_address_ptr: .long stv_channel_address
 resident_copy_20_ptr:     .long stv_resident_copy_20
 resident_noop_ptr:        .long stv_resident_noop
+    .ifdef SHIENRYU_PROFILE
+resident_game_vblank:     .long 0x06004632
+resident_game_aux:        .long 0x06004744
+    .else
 resident_game_vblank:     .long 0x06035278
 resident_game_aux:        .long 0x06035C48
+    .endif
 resident_transition_ptr:  .long stv_handler_table_update
 resident_veneer_installer_ptr: .long stv_install_resident_veneers
 
@@ -1791,3 +1796,45 @@ sound_vector_ptr:   .long 0x25A00004
 sound_vector_limit: .long 0x00080000
 sound_sf_ptr:       .long 0x20100063
 sound_comreg_ptr:   .long 0x2010001F
+
+    ! Shienryu's normal entry immediately installs its own stack and masked
+    ! SR before calling game initialization. The clean trampoline has already
+    ! materialized the measured program image and resident state.
+    .org 0x1700, 0
+    .global stv_shienryu_handoff
+stv_shienryu_handoff:
+    mov.l   shien_handoff_vbr, r0
+    ldc     r0, vbr
+    mov.l   shien_handoff_gbr, r0
+    ldc     r0, gbr
+    mov     #1, r0
+    ldc     r0, sr
+    mov.l   shien_handoff_stack, r15
+    mov.l   shien_handoff_pr, r0
+    lds     r0, pr
+    mov.l   shien_handoff_entry, r7
+    jmp     @r7
+    nop
+    .align 2
+shien_handoff_vbr:   .long 0x06000000
+shien_handoff_gbr:   .long 0xFFFFFE00
+shien_handoff_stack: .long 0x06100000
+shien_handoff_pr:    .long 0x00004516
+shien_handoff_entry: .long 0x06004010
+
+    .org 0x1740, 0
+    .global stv_shienryu_profile_init
+stv_shienryu_profile_init:
+    mov.l   shien_slot_340, r1
+    mov.l   shien_mask_set, r0
+    mov.l   r0, @r1
+    mov.l   shien_slot_344, r1
+    mov.l   shien_mask_update, r0
+    mov.l   r0, @r1
+    rts
+    nop
+    .align 2
+shien_slot_340:    .long 0x06000340
+shien_slot_344:    .long 0x06000344
+shien_mask_set:    .long 0x06000C00
+shien_mask_update: .long 0x06000C0A

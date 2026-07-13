@@ -13,6 +13,7 @@ def tool_output(*args: str) -> str:
 
 def main() -> int:
     elf = Path(sys.argv[1] if len(sys.argv) > 1 else "stv-native-hle.elf")
+    profile = sys.argv[2] if len(sys.argv) > 2 else "bakubaku"
     symbols = tool_output("sh-elf-nm", "-n", str(elf))
     disasm = tool_output("sh-elf-objdump", "-d", str(elf))
 
@@ -53,6 +54,8 @@ def main() -> int:
         "stv_hardware_init": 0x04401400,
         "stv_smpc_command": 0x04401500,
         "stv_scsp_sound_poll": 0x04401600,
+        "stv_shienryu_handoff": 0x04401700,
+        "stv_shienryu_profile_init": 0x04401740,
     }
     required = {}
     for name, expected_address in expected.items():
@@ -73,13 +76,19 @@ def main() -> int:
             raise SystemExit(f"expected instruction absent: {instruction}")
 
     raw = elf.with_suffix(".bin").read_bytes()
+    if profile == "shienryu":
+        for value in (0x06004632, 0x06004744, 0x06004010):
+            if value.to_bytes(4, "big") not in raw:
+                raise SystemExit(
+                    f"Shienryu profile literal absent: {value:#010x}")
     for value in (0x03000000, 0x03400000, 0x01000000,
                   0x0604AFD4, 0x06053C98, 0xD001402B, 0x00090009,
                   required["stv_long_copy_reloc"],
                   required["stv_memmove_reloc"], 0x06000100,
                   0x06000300, 0x06000304, 0x06000310, 0x06000314,
+                  0x06000340, 0x06000344,
                   0x06000610, 0x0600063C, 0x06000660,
-                  0x06000A00, 0x06000B80, 0x06035278, 0xDEADE001,
+                  0x06000A00, 0x06000B80, 0xDEADE001,
                   0x25807020, 0x25807022, 0x25807024,
                   0x06002864, 0x06002868, 0x0600286C,
                   0x06002870, 0x06002874, 0x06000730,
@@ -93,6 +102,10 @@ def main() -> int:
                   0x25A00004, 0x00080000):
         if value.to_bytes(4, "big") not in raw:
             raise SystemExit(f"required big-endian word absent: {value:#010x}")
+
+    callback = 0x06004632 if profile == "shienryu" else 0x06035278
+    if callback.to_bytes(4, "big") not in raw:
+        raise SystemExit(f"profile callback absent: {callback:#010x}")
 
     for value in (0x060FFFDC, 0x060D28C8, 0x06010660, 0xFF79A6F1,
                   0x00000120, 0x20180108, 0x45A07058,

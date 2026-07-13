@@ -57,11 +57,41 @@ we invest in the full toolchain.
 make                 # produces trampoline.bin
 make test-build      # also prints the disassembly
 make test-run        # opt-in trampoline-run.bin with native game handoff
+make test-shienryu   # Shienryu copy-path diagnostic; no game entry
 make clean
 ```
 
 Requires Ubuntu `binutils-sh-elf` (provides `sh-elf-as`, `sh-elf-ld`,
 `sh-elf-objcopy`). Installed via `apt install binutils-sh-elf`.
+
+### Shienryu copy diagnostic
+
+`make test-shienryu` builds `trampoline-shienryu.bin`. This variant uses the
+oracle-measured Shienryu copy (`0x02200000` to `0x06003000`, `0xF9000` bytes)
+and verifies the copied `SEGA` word. It deliberately skips Baku's relocation
+patches and resident construction, halts on a magenta success/red failure
+screen, and never enters the game.
+
+Embed it only with the packer's explicit development override:
+
+```text
+python tools/stv/pack_game.py tools/stv/games/shienryu.json ROM_DIRECTORY \
+  shienryu-saroo-diagnostic.bin \
+  --boot-overlay stv-trampoline/trampoline-shienryu.bin \
+  --native-hle stv-native-hle/stv-native-hle.bin \
+  --allow-unported-modules
+```
+
+This is a copy-path diagnostic, not a hardware game-entry image. The packer
+continues to reject modules without the override while Shienryu is
+`clean-oracle-booted` rather than `hardware-candidate`.
+
+`make test-shienryu-run` additionally builds the experimental clean-run
+trampoline. It constructs the Shienryu native resident before copying the game,
+then enters the game-specific handoff at native CS1 address `0x04401700`.
+Combine it only with `stv-native-hle-shienryu.bin`. The SAROO-mapping Yabause
+twin reached the game's backup-RAM initialization screen through frame 600
+without ST-V BIOS, a Master SH-2 low-ROM edge, or an invalid opcode.
 
 ## Running
 

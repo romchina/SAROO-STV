@@ -66,6 +66,13 @@ _boot_header:
 ! ------------------------------------------------------------------
     .section .text, "ax"
     .align 2
+
+    .ifndef GAME_DST
+    .set GAME_DST, 0x06010000
+    .set GAME_SRC, 0x02201000
+    .set GAME_LONG_COUNT, 0x0003C000
+    .set GAME_FIRST_WORD, 0x4F22B0C3
+    .endif
     .global _start
 _start:
     ! The boot overlay currently aliases image offset 31 MB onto CS0 low
@@ -94,6 +101,23 @@ alias_entry:
     mov.l   hle_hardware_init_ptr, r0
     jsr     @r0
     nop
+    .ifdef SHIENRYU_PROFILE
+    .ifdef ENTER_GAME
+    ! Shienryu occupies HWRAM from 0x06003000, so build/clear the resident
+    ! below it before copying the program. Running this after the copy would
+    ! erase the first 0xC000 bytes of game code.
+    mov.l   hle_resident_init_ptr, r0
+    jsr     @r0
+    nop
+    mov.l   hle_shien_profile_init_ptr, r0
+    jsr     @r0
+    nop
+    mov.l   hle_smpc_pad_init_ptr, r0
+    jsr     @r0
+    nop
+    .endif
+    .endif
+    .ifndef SHIENRYU_PROFILE
     mov.l   game_page_ptr, r1
     mov.l   sega_word_ptr, r2
     mov.l   sega_long_count_ptr, r3
@@ -102,6 +126,10 @@ fill_sega_page:
     add     #4, r1
     dt      r3
     bf      fill_sega_page
+    .else
+fill_sega_page:
+    nop
+    .endif
 
     ! Native CS1 long-copy service: r4=dst, r5=src, r6=long count.
     mov.l   game_dst_ptr, r4
@@ -115,13 +143,18 @@ call_long_copy:
     ! Install relocation veneers only after the game copy, otherwise the
     ! copied FPR body would overwrite them.
 call_install:
+    .ifndef SHIENRYU_PROFILE
     mov.l   hle_install_ptr, r0
     jsr     @r0
     nop
+    .else
+    nop
+    .endif
 
     ! Generate the clean HWRAM vector/workspace resident, then point the SH-2
     ! at it.  This is functional state construction, not a copied BIOS blob.
 call_resident_init:
+    .ifndef SHIENRYU_PROFILE
     mov.l   hle_resident_init_ptr, r0
     jsr     @r0
     nop
@@ -133,6 +166,9 @@ call_resident_init:
     ldc     r0, vbr
     mov.l   gbr_base_ptr, r0
     ldc     r0, gbr
+    .else
+    nop
+    .endif
 
     ! Verify the first copied instruction against fpr17969.13 offset 0x1000.
     ! A mismatch gets a distinct heartbeat and red screen; success remains
@@ -218,17 +254,22 @@ overlay_ctrl_ptr:   .long 0x2580701C
 game_page_ptr:      .long 0x0600F000
 sega_word_ptr:      .long 0x53454741
 sega_long_count_ptr:.long 0x00000400
-game_dst_ptr:       .long 0x06010000
-game_src_ptr:       .long 0x02201000
-game_long_count_ptr:.long 0x0003C000
-game_first_word_ptr:.long 0x4F22B0C3
+game_dst_ptr:       .long GAME_DST
+game_src_ptr:       .long GAME_SRC
+game_long_count_ptr:.long GAME_LONG_COUNT
+game_first_word_ptr:.long GAME_FIRST_WORD
 hle_long_copy_ptr:  .long 0x04400000
 hle_install_ptr:    .long 0x04400088
 hle_resident_init_ptr:.long 0x04400800
 hle_smpc_pad_init_ptr:.long 0x04401200
 hle_hardware_init_ptr:.long 0x04401400
+hle_shien_profile_init_ptr:.long 0x04401740
     .ifdef ENTER_GAME
+    .ifdef SHIENRYU_PROFILE
+hle_bootstrap_ptr:   .long 0x04401700
+    .else
 hle_bootstrap_ptr:   .long 0x04400A00
+    .endif
     .endif
 vbr_base_ptr:       .long 0x06000000
 gbr_base_ptr:       .long 0xFFFFFE00

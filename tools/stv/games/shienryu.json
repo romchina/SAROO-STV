@@ -2,7 +2,7 @@
   "format": "saroo-stv-game-v1",
   "game": "shienryu",
   "title": "Shienryu (JUET 961226 V1.000)",
-  "port_status": "layout-only",
+  "port_status": "clean-oracle-booted",
   "image_size": 33554432,
   "roms": [
     {
@@ -33,10 +33,74 @@
       "implemented": false
     }
   ],
+  "boot_profile": {
+    "source_image_offset": 2097152,
+    "source_saturn_address": "0x02200000",
+    "destination": "0x06003000",
+    "length": 1019904,
+    "entry": "0x06004010",
+    "first_word": "0x53454741",
+    "entry_registers": {
+      "r0": "0x00000510",
+      "r1": "0x22200000",
+      "r2": "0x060040ec",
+      "r3": "0x06000254",
+      "r4": "0x060fc000",
+      "r5": "0x222f9000",
+      "r6": "0x00000000",
+      "r7": "0x06004010",
+      "r15": "0x06100000",
+      "pr": "0x00004516",
+      "sr": "0x00000001",
+      "gbr": "0xfffffe00",
+      "vbr": "0x06000000"
+    },
+    "observed_bios_services": [
+      "0x00000efc",
+      "0x0000372c",
+      "0x00003e4e",
+      "0x0000426c",
+      "0x00004500",
+      "0x00004596"
+    ],
+    "requires_stv_bios_resident": false
+  },
+  "resident_profile": {
+    "vblank_vector": "0x06001f48",
+    "transition_service": "0x0000426c",
+    "transition_pending": 0,
+    "api_slots": {
+      "0x06000340": "0x06000c00",
+      "0x06000344": "0x06000c0a"
+    },
+    "service_slots": {
+      "0x06000610": "0x06000d14",
+      "0x0600063c": "0x0000372c",
+      "0x06000640": "0x00003744",
+      "0x06000644": "0x06001412",
+      "0x06000648": "0x06001190",
+      "0x06000660": "0x060014e0"
+    },
+    "handler_slots": {
+      "0x06000a00": "0x06004632",
+      "0x06000a04": "0x06004744",
+      "0x06000a08": "0x000044fc",
+      "0x06000a0c": "0x000044fc",
+      "0x06000a10": "0x000044fc"
+    }
+  },
+  "oracle": {
+    "backend": "yabause-stv SAROO mapping twin with Saturn BIOS",
+    "result": "clean native-HLE path reaches game backup-RAM initialization screen",
+    "validated_through_frame": 600,
+    "stv_bios_executed": false,
+    "master_low_rom_edges": 0,
+    "invalid_opcode": false
+  },
   "required_relocation": null,
   "blockers": [
-    "capture game handoff and runtime BIOS-service trace",
-    "implement Shienryu trampoline/resident profile",
-    "implement 93C46 EEPROM persistence"
+    "implement persistent operator settings without a physical ST-V 93C46",
+    "validate reset-to-attract behavior beyond the backup-RAM initialization screen",
+    "complete final electrical and timing validation on SAROO hardware"
   ]
 }

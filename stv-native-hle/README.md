@@ -175,3 +175,12 @@ measured `0x4114` handoff frame, and game execution ran for 60 seconds with
 `STV_NOLOW` and invalid-opcode tracing enabled. No low BIOS edge, exception,
 invalid opcode, or unimplemented service occurred. The temporary twin mapping
 and probes were removed after the run.
+
+## Shienryu profile
+
+`make test-shienryu` builds `stv-native-hle-shienryu.bin`. It retains the
+shared leaf services but installs Shienryu's measured VBlank/aux callbacks
+(`0x06004632`, `0x06004744`), restores the mask API slots at
+`0x06000340/344`, and exposes the clean game handoff at `0x04401700`. Use it
+only with `trampoline-shienryu-run.bin`; Baku's callback and handoff constants
+remain isolated in the default image.

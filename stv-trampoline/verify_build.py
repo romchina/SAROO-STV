@@ -24,6 +24,7 @@ def symbols(path: Path) -> dict[str, int]:
 def main() -> int:
     elf = Path(sys.argv[1])
     binary = Path(sys.argv[2])
+    profile = sys.argv[3] if len(sys.argv) > 3 else "bakubaku"
     data = binary.read_bytes()
     sym = symbols(elf)
 
@@ -36,21 +37,36 @@ def main() -> int:
             < sym["verify_game_copy"]
             < sym["show_status"])
 
-    required_longs = (
+    common_longs = (
         0x0600F000, 0x53454741, 0x00000400,
-        0x06010000, 0x02201000, 0x0003C000,
-        0x4F22B0C3, 0x04400000, 0x04400088,
+        0x04400000, 0x04400088,
         0x04400800, 0x06000000, 0xFFFFFE00,
         0x04401200,
         0x04401400,
         0x5AA5A55A, 0xDEAD1000,
     )
+    if profile == "shienryu":
+        profile_longs = (
+            0x06003000, 0x02200000, 0x0003E400, 0x53454741,
+        )
+        summary = "Shienryu 0xF9000-byte measured program copy"
+    elif profile == "shienryu-run":
+        profile_longs = (
+            0x06003000, 0x02200000, 0x0003E400, 0x53454741,
+            0x04401700,
+        )
+        summary = "Shienryu clean-resident game entry"
+    else:
+        profile_longs = (
+            0x06010000, 0x02201000, 0x0003C000, 0x4F22B0C3,
+        )
+        summary = "Baku 0xF0000-byte shifted FPR copy"
+    required_longs = common_longs + profile_longs
     for value in required_longs:
         assert struct.pack(">I", value) in data, f"missing literal {value:#010x}"
 
     print(
-        "verified cold boot: SEGA page, 0xF0000-byte shifted FPR copy, "
-        "post-copy veneers, diagnostics"
+        f"verified cold boot: {summary}, diagnostics"
     )
     return 0
 

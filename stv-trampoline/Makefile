@@ -12,6 +12,9 @@ LDFLAGS := -T ldscript
 
 OBJ := trampoline.o
 RUN_OBJ := trampoline-run.o
+SHIENRYU_OBJ := trampoline-shienryu.o
+SHIENRYU_RUN_OBJ := trampoline-shienryu-run.o
+SHIENRYU_FLAGS := $(shell python3 profile_flags.py ../tools/stv/games/shienryu.json)
 
 all: trampoline.bin
 
@@ -20,6 +23,12 @@ all: trampoline.bin
 
 trampoline-run.o: trampoline.s
 	$(AS) $(ASFLAGS) --defsym ENTER_GAME=1 -o $@ $<
+
+trampoline-shienryu.o: trampoline.s
+	$(AS) $(ASFLAGS) --defsym SHIENRYU_PROFILE=1 $(SHIENRYU_FLAGS) -o $@ $<
+
+trampoline-shienryu-run.o: trampoline.s
+	$(AS) $(ASFLAGS) --defsym SHIENRYU_PROFILE=1 --defsym ENTER_GAME=1 $(SHIENRYU_FLAGS) -o $@ $<
 
 trampoline.elf: $(OBJ) ldscript
 	$(LD) $(LDFLAGS) $(OBJ) -o $@
@@ -34,6 +43,20 @@ trampoline-run.elf: $(RUN_OBJ) ldscript
 trampoline-run.bin: trampoline-run.elf
 	$(OBJCOPY) -O binary $< $@
 	@echo "Run size: $$(stat -c%s $@) bytes"
+
+trampoline-shienryu.elf: $(SHIENRYU_OBJ) ldscript
+	$(LD) $(LDFLAGS) $(SHIENRYU_OBJ) -o $@
+
+trampoline-shienryu.bin: trampoline-shienryu.elf
+	$(OBJCOPY) -O binary $< $@
+	@echo "Shienryu diagnostic size: $$(stat -c%s $@) bytes"
+
+trampoline-shienryu-run.elf: $(SHIENRYU_RUN_OBJ) ldscript
+	$(LD) $(LDFLAGS) $(SHIENRYU_RUN_OBJ) -o $@
+
+trampoline-shienryu-run.bin: trampoline-shienryu-run.elf
+	$(OBJCOPY) -O binary $< $@
+	@echo "Shienryu run size: $$(stat -c%s $@) bytes"
 
 # Predictive test: wrap as a CUE/BIN and run Mednafen.
 # Mednafen actually wants a MODE1/2352 CD image. Pad with 2048-byte data
@@ -54,7 +77,14 @@ test-run: trampoline-run.bin
 	python3 verify_build.py trampoline-run.elf trampoline-run.bin
 	@python3 -c 'from pathlib import Path; assert bytes.fromhex("04400a00") in Path("trampoline-run.bin").read_bytes(); print("verified run handoff 0x04400A00")'
 
-clean:
-	rm -f $(OBJ) $(RUN_OBJ) trampoline.elf trampoline.bin trampoline-run.elf trampoline-run.bin
+test-shienryu: trampoline-shienryu.bin
+	python3 verify_build.py trampoline-shienryu.elf trampoline-shienryu.bin shienryu
 
-.PHONY: all clean test-build test-run
+test-shienryu-run: trampoline-shienryu-run.bin
+	python3 verify_build.py trampoline-shienryu-run.elf trampoline-shienryu-run.bin shienryu-run
+	@python3 -c 'from pathlib import Path; assert bytes.fromhex("04401700") in Path("trampoline-shienryu-run.bin").read_bytes(); print("verified Shienryu handoff 0x04401700")'
+
+clean:
+	rm -f $(OBJ) $(RUN_OBJ) $(SHIENRYU_OBJ) $(SHIENRYU_RUN_OBJ) trampoline.elf trampoline.bin trampoline-run.elf trampoline-run.bin trampoline-shienryu.elf trampoline-shienryu.bin trampoline-shienryu-run.elf trampoline-shienryu-run.bin
+
+.PHONY: all clean test-build test-run test-shienryu test-shienryu-run

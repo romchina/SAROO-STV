@@ -42,8 +42,20 @@ class DescriptorPackerTests(unittest.TestCase):
         self.assertEqual(image[0xC00000:], bytes(0x1400000))
         self.assertEqual(manifest["format"], "saroo-stv-cart-v2")
         self.assertEqual(manifest["game"], "shienryu")
-        self.assertEqual(manifest["port_status"], "layout-only")
+        self.assertEqual(manifest["port_status"], "clean-oracle-booted")
         self.assertIsNone(manifest["required_relocation"])
+        profile = manifest["boot_profile"]
+        self.assertEqual(profile["source_image_offset"], 0x200000)
+        self.assertEqual(profile["destination"], "0x06003000")
+        self.assertEqual(profile["length"], 0xF9000)
+        self.assertEqual(profile["entry"], "0x06004010")
+        self.assertFalse(profile["requires_stv_bios_resident"])
+        resident = self.shienryu["resident_profile"]
+        self.assertEqual(
+            resident["handler_slots"]["0x06000a00"], "0x06004632")
+        self.assertEqual(
+            resident["handler_slots"]["0x06000a08"], "0x000044fc")
+        self.assertEqual(manifest["resident_profile"], resident)
         eeprom = manifest["auxiliary"]["eeprom-shienryu.bin"]
         self.assertEqual(eeprom["kind"], "93c46-eeprom")
         self.assertFalse(eeprom["implemented"])
@@ -74,6 +86,15 @@ class DescriptorPackerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "overlaps"):
             pack_game.build_image(
                 descriptor, self.directory, verify_hashes=False)
+
+    def test_descriptor_rejects_boot_profile_outside_hwram(self):
+        descriptor = dict(self.shienryu)
+        descriptor["boot_profile"] = dict(descriptor["boot_profile"])
+        descriptor["boot_profile"]["destination"] = "0x060ff000"
+        path = self.directory / "bad-profile.json"
+        path.write_text(__import__("json").dumps(descriptor), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "exceeds HWRAM"):
+            pack_game.load_descriptor(path)
 
 
 if __name__ == "__main__":
