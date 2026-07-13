@@ -70,6 +70,11 @@ setter also refreshes Saturn's shared `2RDY` word and the compact
 `0x06000600` Slave SH-2 bootstrap. Games can therefore install vector `0x94`
 and issue SMPC `SSHON` using the original dual-CPU BIOS contract.
 
+The veneer installer tail-calls `stv_resident_queue_init` at `0x04401000`.
+It binds resident queue slots `0x06000668/670` to the two native 16-entry
+queue consumers for every game profile; Baku Baku calls the first slot during
+its opening state transition, while Shienryu consumes both from VBlank-OUT.
+
 The handler entry points begin at `0x04400900`. The trampoline calls the
 initializer after copying the game and installing relocation veneers, then
 loads `VBR=0x06000000` and `GBR=0xFFFFFE00`. Interrupts remain masked during

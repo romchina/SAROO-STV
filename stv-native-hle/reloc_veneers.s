@@ -1229,7 +1229,9 @@ resident_veneer_loop:
     bra     resident_veneer_loop
     nop
 resident_veneer_done:
-    rts
+    ! Tail-call the shared queue-slot initializer; it returns directly to the
+    ! resident constructor through our unchanged PR.
+    bra     stv_resident_queue_init
     nop
 
     .align 2
@@ -1365,6 +1367,23 @@ handoff_scu_ims_value: .long 0xFFFFE1FC
 handoff_stack_seed:
     .long 0x39A0500E, 0x00000000, 0x20180108, 0x45A00000
     .long 0x0601025E, 0x00000000, 0x00000000, 0x06010006
+
+    ! Both supported games consume the two BIOS resident event queues through
+    ! pointer slots 0x06000668 and 0x06000670.  Keep this outside the crowded
+    ! 0x800 constructor and install it for every profile.
+    .org 0x1000, 0
+    .global stv_resident_queue_init
+stv_resident_queue_init:
+    mov.l   resident_queue_slot_668, r1
+    mov.l   resident_queue_pop_init, r0
+    mov.l   r0, @r1
+    add     #0x34, r0
+    mov.l   r0, @(8, r1)
+    rts
+    nop
+    .align 2
+resident_queue_slot_668: .long 0x06000668
+resident_queue_pop_init: .long stv_resident_queue_pop
 
     .org 0x1100, 0
     .global stv_resident_handler_get
@@ -1955,14 +1974,6 @@ stv_shienryu_profile_init:
     mov.l   shien_mask_shadow, r1
     mov.l   shien_mask_initial, r0
     mov.l   r0, @r1
-    ! The VBLANK-OUT callback consumes the two resident event queues through
-    ! slots 0x668 and 0x670.  The native queue implementations are 0x34 bytes
-    ! apart, so install both without spending another literal-pool entry.
-    mov.l   shien_slot_668, r1
-    mov.l   shien_queue_pop_ptr, r0
-    mov.l   r0, @r1
-    add     #0x34, r0
-    mov.l   r0, @(8, r1)
     .ifdef SHIENRYU_PROFILE
     mov.l   shien_slot_640, r1
     mov.l   shien_backup_probe_ptr, r0
@@ -1998,8 +2009,6 @@ shien_mask_shadow: .long 0x06000348
 shien_mask_initial:.long 0xFFFF7FFE
 shien_mask_set:    .long 0x06000C00
 shien_mask_update: .long 0x06000C0A
-shien_slot_668:    .long 0x06000668
-shien_queue_pop_ptr:.long stv_resident_queue_pop
     .ifdef SHIENRYU_PROFILE
 shien_slot_640:    .long 0x06000640
 shien_slot_644:    .long 0x06000644
